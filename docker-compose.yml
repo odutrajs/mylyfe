@@ -1,0 +1,138 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      API_PORT: "3333"
+      WEB_ORIGIN: ${WEB_ORIGIN:-https://feedeo.com.br,https://www.feedeo.com.br}
+      SECRETARY_URL: http://secretary:3334
+      SECRETARY_TOKEN: ${SECRETARY_TOKEN}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://feedeo.com.br/api/routine/google/callback}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-https://feedeo.com.br/api/routine/microsoft/callback}
+      ROUTINE_TOKEN_KEY: ${ROUTINE_TOKEN_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    volumes:
+      - api-data:/app/apps/api/data
+    expose:
+      - "3333"
+
+  secretary:
+    build:
+      context: .
+      dockerfile: apps/secretary/Dockerfile
+    restart: unless-stopped
+    environment:
+      SECRETARY_PORT: "3334"
+      API_URL: http://api:3333
+      SECRETARY_TOKEN: ${SECRETARY_TOKEN}
+      SECRETARY_SESSION_DIR: /app/apps/secretary/data/session
+    volumes:
+      - secretary-data:/app/apps/secretary/data
+    expose:
+      - "3334"
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    depends_on:
+      cert-dummy:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+
+  cert-dummy:
+    image: alpine:3.20
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        LIVE=/etc/letsencrypt/live/feedeo.com.br
+        if [ -f "$$LIVE/fullchain.pem" ] && [ -f "$$LIVE/privkey.pem" ]; then
+          echo "Cert already present"
+          exit 0
+        fi
+        mkdir -p "$$LIVE"
+        apk add --no-cache openssl
+        openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+          -keyout "$$LIVE/privkey.pem" \
+          -out "$$LIVE/fullchain.pem" \
+          -subj "/CN=feedeo.com.br"
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+
+  certbot-init:
+    image: certbot/certbot
+    entrypoint: sh
+    command:
+      - -c
+      - |
+        sleep 15
+        certbot certonly --webroot -w /var/www/certbot \
+          --email "$$CERTBOT_EMAIL" --agree-tos --no-eff-email \
+          -d feedeo.com.br -d www.feedeo.com.br \
+          --non-interactive --keep-until-expiring || true
+    environment:
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-thiago@feedeo.com.br}
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    depends_on:
+      nginx:
+        condition: service_started
+
+  certbot-renew:
+    image: certbot/certbot
+    restart: unless-stopped
+    entrypoint: sh
+    command:
+      - -c
+      - |
+        trap exit TERM
+        while :; do
+          sleep 12h & wait $${!}
+          certbot renew --quiet --webroot -w /var/www/certbot
+        done
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    depends_on:
+      certbot-init:
+        condition: service_completed_successfully
+
+  nginx-reload:
+    image: docker:27-cli
+    command:
+      - sh
+      - -c
+      - |
+        sleep 8
+        docker kill -s HUP mylyfe-nginx-1 2>/dev/null ||
+        docker kill -s HUP mylyfe_nginx_1 2>/dev/null || true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      certbot-init:
+        condition: service_completed_successfully
+
+volumes:
+  api-data:
+  secretary-data:
+  certbot-conf:
+  certbot-www:

@@ -1,0 +1,22 @@
+{
+  "name": "mylyfe-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @mylyfe/domain && concurrently -n api,web -c green,cyan \"npm run dev -w @mylyfe/api\" \"npm run dev -w @mylyfe/web\"",
+    "build": "npm run build -w @mylyfe/domain && npm run build -w @mylyfe/api && npm run build -w @mylyfe/web",
+    "test": "npm run test -w @mylyfe/domain",
+    "typecheck": "npm run typecheck -w @mylyfe/domain && npm run build -w @mylyfe/domain && npm run typecheck -w @mylyfe/api && npm run typecheck -w @mylyfe/web && npm run typecheck -w @mylyfe/secretary",
+    "secretary": "npm run dev -w @mylyfe/secretary"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

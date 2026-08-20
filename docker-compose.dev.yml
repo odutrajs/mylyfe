@@ -1,0 +1,44 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: mylyfe-api
+    environment:
+      API_PORT: 3333
+      WEB_ORIGIN: http://localhost:5174
+      SECRETARY_URL: http://secretary:3334
+      SECRETARY_TOKEN: ${SECRETARY_TOKEN:-dev-secretary-token}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:3333/api/routine/google/callback}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-http://localhost:3333/api/routine/microsoft/callback}
+      ROUTINE_TOKEN_KEY: ${ROUTINE_TOKEN_KEY:-mylyfe-dev-routine-token-key}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    ports:
+      - "3333:3333"
+    volumes:
+      - ./apps/api/data:/app/apps/api/data
+    restart: unless-stopped
+
+  secretary:
+    build:
+      context: .
+      dockerfile: apps/secretary/Dockerfile
+    container_name: mylyfe-secretary
+    environment:
+      SECRETARY_PORT: 3334
+      API_URL: ${SECRETARY_API_URL:-http://host.docker.internal:3333}
+      SECRETARY_TOKEN: ${SECRETARY_TOKEN:-dev-secretary-token}
+      SECRETARY_SESSION_DIR: /app/apps/secretary/data/session
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3334:3334"
+    volumes:
+      - ./apps/secretary/data:/app/apps/secretary/data
+    restart: unless-stopped
