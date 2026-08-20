@@ -727,7 +727,8 @@ export const applySecretaryInboxToPlan = (
   text: string,
   now = new Date(),
   personName?: string,
-  intents?: SecretaryIntent[]
+  intents?: SecretaryIntent[],
+  personId?: string
 ) => {
   const secretary = normalizeSecretaryModuleState(plan.secretary);
   const parsedAppointment = parseAppointmentConfirmation(text, now, secretary.settings.timezone);
@@ -771,7 +772,7 @@ export const applySecretaryInboxToPlan = (
           );
           continue;
         }
-        const added = addManualExpense(next, intent, now, secretary.settings.timezone);
+        const added = addManualExpense(next, intent, now, secretary.settings.timezone, personId);
         next = added.plan;
         const amount = added.transaction.amount.toFixed(2).replace(".", ",");
         const when = formatDayMonth(added.transaction.date, secretary.settings.timezone);

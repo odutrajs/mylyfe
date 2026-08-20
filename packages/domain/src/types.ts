@@ -115,6 +115,7 @@ export interface Person {
   name: string;
   email?: string;
   phone?: string;
+  whatsappVerifiedAt?: string;
   birthDate?: string;
   age?: number;
   role: "primary" | "partner" | "dependent";

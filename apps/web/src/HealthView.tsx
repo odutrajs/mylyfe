@@ -94,7 +94,7 @@ export function HealthView({
   setPlan: Dispatch<SetStateAction<FinancePlan | null>>;
   section: HealthSection;
 }) {
-  const health = normalizeHealthModuleState(plan.health);
+  const health = useMemo(() => normalizeHealthModuleState(plan.health), [plan.health]);
   const timezone = plan.routine?.settings?.timezone || plan.secretary?.settings?.timezone || "America/Sao_Paulo";
   const people = plan.profile.people;
   const [appointmentDraft, setAppointmentDraft] = useState(emptyAppointment);

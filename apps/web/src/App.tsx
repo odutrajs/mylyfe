@@ -127,6 +127,7 @@ import { HealthView } from "./HealthView";
 import { HomeView } from "./HomeView";
 import { RoutineView } from "./RoutineView";
 import { SecretaryView } from "./SecretaryView";
+import { WhatsAppPhoneField } from "./WhatsAppPhoneField";
 import {
   apiRequest,
   clearAuthToken,
@@ -277,7 +278,14 @@ function optionsFrom(record: Record<string, string>) {
   return Object.entries(record).map(([value, label]) => ({ value, label }));
 }
 
+const expenseCategoryCache = new WeakMap<ExpenseCategoryConfig[], ExpenseCategoryConfig[]>();
+
 function normalizeExpenseCategories(categories?: ExpenseCategoryConfig[]) {
+  if (categories) {
+    const cached = expenseCategoryCache.get(categories);
+    if (cached) return cached;
+  }
+
   const defaults = defaultExpenseCategories();
   const defaultIds = new Set(defaults.map((category) => category.id));
   const overrides = new Map((categories ?? []).map((category) => [category.id, category]));
@@ -294,7 +302,9 @@ function normalizeExpenseCategories(categories?: ExpenseCategoryConfig[]) {
       isActive: category.isActive ?? true
     }));
 
-  return [...mergedDefaults, ...customCategories];
+  const normalized = [...mergedDefaults, ...customCategories];
+  if (categories) expenseCategoryCache.set(categories, normalized);
+  return normalized;
 }
 
 function expenseCategoryOptions(plan: FinancePlan, includeInactive = true) {
@@ -1195,9 +1205,6 @@ export default function App() {
   useEffect(() => {
     if (!loaded || !plan || !activePlanId) return;
 
-    const normalizedPlan = normalizePlanForClient(plan);
-    localStorage.setItem(planStorageKey(activePlanId), JSON.stringify(normalizedPlan));
-
     if (!allowSaveRef.current) {
       const unlock = window.setTimeout(() => {
         allowSaveRef.current = true;
@@ -1209,6 +1216,9 @@ export default function App() {
 
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
+      const normalizedPlan = normalizePlanForClient(plan);
+      localStorage.setItem(planStorageKey(activePlanId), JSON.stringify(normalizedPlan));
+
       try {
         const response = await apiRequest(`/plans/${activePlanId}`, {
           method: "PUT",
@@ -1256,7 +1266,16 @@ export default function App() {
     };
   }, [activePlanId]);
 
-  const analysis = useMemo(() => (plan ? analyzePlan(plan) : null), [plan]);
+  const analysisRef = useRef<FinancialAnalysis | null>(null);
+  const analysis = useMemo(() => {
+    if (!plan) return null;
+    const needsLiveAnalysis =
+      !plan.onboardingCompleted || view === "dashboard" || view === "categories" || view === "history";
+    if (!needsLiveAnalysis && analysisRef.current) return analysisRef.current;
+    const next = analyzePlan(plan);
+    analysisRef.current = next;
+    return next;
+  }, [plan, view]);
   const inviteByToken = inviteToken
     ? (plan?.profile.accountLinks ?? []).find((link) => link.token === inviteToken)
     : undefined;
@@ -1411,6 +1430,7 @@ function AuthScreen({
   const [mode, setMode] = useState<"login" | "signup">(inviteMode && initialName ? "signup" : "login");
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail);
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1454,7 +1474,8 @@ function AuthScreen({
         body: JSON.stringify({
           name: name.trim() || displayNameFromEmail(normalizedEmail),
           email: normalizedEmail,
-          password
+          password,
+          phone: phone.trim() || undefined
         })
       });
       const payload = (await response.json()) as { error?: string; token?: string; session?: UserSession };
@@ -1556,6 +1577,14 @@ function AuthScreen({
           )}
           <div className="form-grid single">
             {mode === "signup" && <TextField label="Seu nome" value={name} onChange={setName} />}
+            {mode === "signup" && (
+              <TextField label="WhatsApp com DDD" value={phone} onChange={setPhone} type="tel" autoComplete="tel" />
+            )}
+            {mode === "signup" && (
+              <p className="form-note">
+                Depois a gente confirma este numero no WhatsApp. So assim a secretaria liga gastos e reunioes a voce.
+              </p>
+            )}
             {lockEmail ? (
               <ReadOnlyField label="E-mail do convite" value={email} />
             ) : (
@@ -1853,6 +1882,12 @@ function PartnerOnboarding({
           <EditorSection title="Seu perfil" icon={<BadgeDollarSign size={18} />}>
             <div className="form-grid">
               <TextField label="Seu nome" value={currentPerson.name} onChange={(name) => updatePerson({ name })} />
+              <WhatsAppPhoneField
+                personId={currentPerson.id}
+                phone={currentPerson.phone ?? ""}
+                verifiedAt={currentPerson.whatsappVerifiedAt}
+                onPhoneChange={(phone, verifiedAt) => updatePerson({ phone, whatsappVerifiedAt: verifiedAt })}
+              />
               <NumberField label="Sua idade" value={currentPerson.age ?? 0} onChange={(age) => updatePerson({ age })} />
               <DateField label="Data de nascimento" value={currentPerson.birthDate} onChange={(birthDate) => updatePerson({ birthDate })} />
               <ReadOnlyField label="E-mail da sua conta" value={session.email} />
@@ -2162,19 +2197,28 @@ function Dashboard({
     analysis.emergencyFundMonths === null
       ? currency.format(analysis.patrimony.liquidAssets)
       : `${currency.format(analysis.patrimony.liquidAssets)} · ${number.format(analysis.emergencyFundMonths)} meses`;
-  const assetsByCategory = assetCategories
-    .map((category) => ({
-      name: labels.assetCategory[category],
-      value: plan.assets.filter((asset) => asset.category === category).reduce((sum, asset) => sum + asset.value, 0)
-    }))
-    .filter((item) => item.value > 0);
-  const horizonRows = analysis.commitment.horizon.map((item) => ({
-    month: formatReferenceMonth(item.month),
-    Recorrentes: item.recurring,
-    Parcelas: item.installments,
-    ...(item.debts > 0 ? { Dividas: item.debts } : {})
-  }));
+  const assetsByCategory = useMemo(
+    () =>
+      assetCategories
+        .map((category) => ({
+          name: labels.assetCategory[category],
+          value: plan.assets.filter((asset) => asset.category === category).reduce((sum, asset) => sum + asset.value, 0)
+        }))
+        .filter((item) => item.value > 0),
+    [plan.assets]
+  );
+  const horizonRows = useMemo(
+    () =>
+      analysis.commitment.horizon.map((item) => ({
+        month: formatReferenceMonth(item.month),
+        Recorrentes: item.recurring,
+        Parcelas: item.installments,
+        ...(item.debts > 0 ? { Dividas: item.debts } : {})
+      })),
+    [analysis.commitment.horizon]
+  );
   const hasHorizonData = analysis.commitment.horizon.some((item) => item.total > 0);
+  const dashboardBudgets = useMemo(() => selectDashboardCategoryBudgets(analysis.categoryBudgets), [analysis.categoryBudgets]);
 
   return (
     <div className="page">
@@ -2260,9 +2304,9 @@ function Dashboard({
             </button>
           }
         >
-          {selectDashboardCategoryBudgets(analysis.categoryBudgets).length > 0 ? (
+          {dashboardBudgets.length > 0 ? (
             <div className="category-mobile-list">
-              {selectDashboardCategoryBudgets(analysis.categoryBudgets).map((item) => (
+              {dashboardBudgets.map((item) => (
                 <button className={`category-mobile-row status-${item.status}`} type="button" key={item.category} onClick={onOpenCategories}>
                   <span className="category-glyph">{categoryGlyph(item.category)}</span>
                   <span>
@@ -2419,7 +2463,10 @@ function PurchaseSimulator({ plan, analysis }: { plan: FinancePlan; analysis: Fi
   const [category, setCategory] = useState<ExpenseCategory>("shopping");
   const installmentCount = mode === "installment" ? Math.max(2, Math.trunc(installments) || 2) : 1;
   const monthlyAmount = installmentCount > 1 ? amount / installmentCount : amount;
-  const simulation = amount > 0 ? simulatePurchaseImpact(plan, mode === "cash" ? amount : monthlyAmount) : null;
+  const simulation = useMemo(
+    () => (amount > 0 ? simulatePurchaseImpact(plan, mode === "cash" ? amount : monthlyAmount) : null),
+    [amount, mode, monthlyAmount, plan]
+  );
   const committedAfterTotal = analysis.commitment.nextMonth.total + (mode === "installment" ? monthlyAmount : 0);
   const committedAfterPercent =
     analysis.commitment.recurringIncome > 0 ? committedAfterTotal / analysis.commitment.recurringIncome : null;
@@ -3084,7 +3131,12 @@ function ProfileStep({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<S
     <EditorSection title="Perfil" icon={<BadgeDollarSign size={18} />}>
       <div className="form-grid">
         <TextField label="Nome" value={primary.name} onChange={(name) => updatePerson(primary.id, { name })} />
-        <TextField label="WhatsApp" value={primary.phone ?? ""} onChange={(phone) => updatePerson(primary.id, { phone })} />
+        <WhatsAppPhoneField
+          personId={primary.id}
+          phone={primary.phone ?? ""}
+          verifiedAt={primary.whatsappVerifiedAt}
+          onPhoneChange={(phone, verifiedAt) => updatePerson(primary.id, { phone, whatsappVerifiedAt: verifiedAt })}
+        />
         <NumberField label="Idade" value={primary.age ?? 0} onChange={(age) => updatePerson(primary.id, { age })} />
         <DateField label="Data de nascimento" value={primary.birthDate} onChange={(birthDate) => updatePerson(primary.id, { birthDate })} />
         <SelectField
@@ -3651,10 +3703,17 @@ function CategoriesView({
   analysis: FinancialAnalysis;
   saveState: SaveState;
 }) {
-  const categories = normalizeExpenseCategories(plan.expenseCategories).sort((a, b) =>
-    a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
+  const categories = useMemo(
+    () =>
+      normalizeExpenseCategories(plan.expenseCategories).sort((a, b) =>
+        a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
+      ),
+    [plan.expenseCategories]
   );
-  const budgetable = categories.filter((category) => category.isActive && isBudgetableCategory(category.id));
+  const budgetable = useMemo(
+    () => categories.filter((category) => category.isActive && isBudgetableCategory(category.id)),
+    [categories]
+  );
   const [selectedId, setSelectedId] = useState(budgetable[0]?.id ?? "");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryColor, setNewCategoryColor] = useState("#0f766e");
@@ -3662,7 +3721,10 @@ function CategoriesView({
   const envelope = analysis.categoryBudgetPlan;
   const selected = budgetable.find((category) => category.id === selectedId) ?? budgetable[0];
   const selectedShare = selected ? resolveCategoryShare(plan, selected.id, envelope.expenseEnvelope) : 0;
-  const allocated = budgetable.reduce((sum, category) => sum + resolveCategoryShare(plan, category.id, envelope.expenseEnvelope), 0);
+  const allocated = useMemo(
+    () => budgetable.reduce((sum, category) => sum + resolveCategoryShare(plan, category.id, envelope.expenseEnvelope), 0),
+    [budgetable, envelope.expenseEnvelope, plan]
+  );
 
   const usageByCategory = (categoryId: ExpenseCategory) => ({
     transactions: plan.transactions.filter((transaction) => transaction.category === categoryId).length,
@@ -3943,15 +4005,18 @@ function TransactionReviewTable({
   useEffect(() => {
     setPage(1);
   }, [transactionSignature]);
-  const categoryOptions = expenseCategoryOptions(plan);
-  const spenderOptions = spenderSelectOptions(plan);
-  const recurringLinkOptions = [
-    { value: "", label: "Nao vincular" },
-    ...recurringTransactions.map((transaction) => ({
-      value: transaction.id,
-      label: `${transaction.name} · ${preciseCurrency.format(transaction.amount)}`
-    }))
-  ];
+  const categoryOptions = useMemo(() => expenseCategoryOptions(plan), [plan.expenseCategories]);
+  const spenderOptions = useMemo(() => spenderSelectOptions(plan), [plan.profile.accountLinks, plan.profile.people]);
+  const recurringLinkOptions = useMemo(
+    () => [
+      { value: "", label: "Nao vincular" },
+      ...recurringTransactions.map((transaction) => ({
+        value: transaction.id,
+        label: `${transaction.name} · ${preciseCurrency.format(transaction.amount)}`
+      }))
+    ],
+    [recurringTransactions]
+  );
 
   const recurringPatch = (recurringTransactionId: string): Partial<FinancialTransaction> => {
     const recurringTransaction = recurringTransactions.find((item) => item.id === recurringTransactionId);
@@ -4024,7 +4089,10 @@ function TransactionReviewTable({
     }
   };
 
-  const sortedTransactions = [...transactions].sort((left, right) => right.date.localeCompare(left.date) || right.id.localeCompare(left.id));
+  const sortedTransactions = useMemo(
+    () => [...transactions].sort((left, right) => right.date.localeCompare(left.date) || right.id.localeCompare(left.id)),
+    [transactions]
+  );
   const totalPages = Math.max(1, Math.ceil(sortedTransactions.length / transactionPageSize));
   const currentPage = Math.min(page, totalPages);
   const pageTransactions = sortedTransactions.slice((currentPage - 1) * transactionPageSize, currentPage * transactionPageSize);
@@ -4236,22 +4304,32 @@ function ImportView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<Se
   const [lastStatement, setLastStatement] = useState<ImportedStatementSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [launchTab, setLaunchTab] = useState<"launch" | "import" | "review">("launch");
-  const pendingTransactions = plan.transactions.filter((transaction) => !transaction.reviewed);
-  const reviewedTransactions = plan.transactions.filter((transaction) => transaction.reviewed);
-  const importedTransactions = plan.transactions.filter((transaction) => transaction.source === "csv" || transaction.source === "pdf");
+  const pendingTransactions = useMemo(() => plan.transactions.filter((transaction) => !transaction.reviewed), [plan.transactions]);
+  const reviewedTransactions = useMemo(() => plan.transactions.filter((transaction) => transaction.reviewed), [plan.transactions]);
+  const importedTransactions = useMemo(
+    () => plan.transactions.filter((transaction) => transaction.source === "csv" || transaction.source === "pdf"),
+    [plan.transactions]
+  );
   const recurringTransactions = plan.recurringTransactions ?? [];
-  const categoryOptions = expenseCategoryOptions(plan);
-  const spenderOptions = spenderSelectOptions(plan);
-  const recurringLinkOptions = [
-    { value: "", label: "Nao vincular" },
-    ...recurringTransactions.map((transaction) => ({
-      value: transaction.id,
-      label: `${transaction.name} · ${preciseCurrency.format(transaction.amount)}`
-    }))
-  ];
-  const currentMonthSpend = plan.transactions
-    .filter((transaction) => !transaction.recurringTransactionId && (transaction.type === "expense" || transaction.type === "debt_payment"))
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
+  const categoryOptions = useMemo(() => expenseCategoryOptions(plan), [plan.expenseCategories]);
+  const spenderOptions = useMemo(() => spenderSelectOptions(plan), [plan.profile.accountLinks, plan.profile.people]);
+  const recurringLinkOptions = useMemo(
+    () => [
+      { value: "", label: "Nao vincular" },
+      ...recurringTransactions.map((transaction) => ({
+        value: transaction.id,
+        label: `${transaction.name} · ${preciseCurrency.format(transaction.amount)}`
+      }))
+    ],
+    [recurringTransactions]
+  );
+  const currentMonthSpend = useMemo(
+    () =>
+      plan.transactions
+        .filter((transaction) => !transaction.recurringTransactionId && (transaction.type === "expense" || transaction.type === "debt_payment"))
+        .reduce((sum, transaction) => sum + transaction.amount, 0),
+    [plan.transactions]
+  );
   const [manualEntry, setManualEntry] = useState({
     date: new Date().toISOString().slice(0, 10),
     merchant: "",
@@ -4836,6 +4914,11 @@ function ImportView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<Se
   );
 }
 
+const transactionTypeFilterOptions = [
+  { value: "", label: "Todos os tipos" },
+  ...Object.entries(transactionTypeLabels).map(([value, label]) => ({ value, label }))
+];
+
 function TransactionsView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<SetStateAction<FinancePlan | null>> }) {
   const [reviewFilter, setReviewFilter] = useState<"all" | "reviewed" | "pending">("all");
   const [monthFilter, setMonthFilter] = useState<string[]>(() => [currentTransactionMonthKey()]);
@@ -4844,20 +4927,26 @@ function TransactionsView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispa
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
   const currentMonth = currentTransactionMonthKey();
   const recurringTransactions = plan.recurringTransactions ?? [];
-  const categoryFilterOptions = expenseCategoryOptions(plan);
-  const typeOptions = [
-    { value: "", label: "Todos os tipos" },
-    ...Object.entries(transactionTypeLabels).map(([value, label]) => ({ value, label }))
-  ];
-  const forecastMonths = recurringTransactions.length > 0 ? nextMonthKeys(currentMonth, 12) : [];
-  const monthOptions = [
-    ...Array.from(new Set([currentMonth, ...forecastMonths, ...plan.transactions.map(transactionMonthKey).filter(Boolean)]))
-      .sort((a, b) => b.localeCompare(a))
-      .map((month) => ({ value: month, label: formatTransactionMonth(month) }))
-  ];
+  const typeOptions = transactionTypeFilterOptions;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(searchTerm), 180);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+
+  const categoryFilterOptions = useMemo(() => expenseCategoryOptions(plan), [plan.expenseCategories]);
+  const monthOptions = useMemo(() => {
+    const forecastMonths = recurringTransactions.length > 0 ? nextMonthKeys(currentMonth, 12) : [];
+    return [
+      ...Array.from(new Set([currentMonth, ...forecastMonths, ...plan.transactions.map(transactionMonthKey).filter(Boolean)]))
+        .sort((a, b) => b.localeCompare(a))
+        .map((month) => ({ value: month, label: formatTransactionMonth(month) }))
+    ];
+  }, [currentMonth, plan.transactions, recurringTransactions.length]);
   const hasDateFilter = Boolean(startDateFilter || endDateFilter);
   const periodLabel = hasDateFilter
     ? `${startDateFilter ? formatDateDisplay(startDateFilter) : "Inicio"} a ${endDateFilter ? formatDateDisplay(endDateFilter) : "Hoje"}`
@@ -4866,95 +4955,116 @@ function TransactionsView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispa
     : monthFilter.length === 1
     ? formatTransactionMonth(monthFilter[0] ?? "")
     : `${monthFilter.length} meses selecionados`;
-  const recurringPeriodMonths = hasDateFilter
-    ? monthKeysBetween((startDateFilter || `${currentMonth}-01`).slice(0, 7), (endDateFilter || `${currentMonth}-01`).slice(0, 7))
-    : monthFilter.length === 0
-    ? monthOptions.map((option) => option.value)
-    : monthFilter;
-  const periodTransactions = plan.transactions.filter((transaction) => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-    const transactionDate = toDateInput(transaction.date);
-    const matchesMonth = hasDateFilter || monthFilter.length === 0 || monthFilter.includes(transactionMonthKey(transaction));
-    const matchesStartDate = !startDateFilter || transactionDate >= startDateFilter;
-    const matchesEndDate = !endDateFilter || transactionDate <= endDateFilter;
-    const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(transaction.category);
-    const matchesType = !typeFilter || transaction.type === typeFilter;
-    const matchesSearch =
-      !normalizedSearch ||
-      transaction.merchant.toLowerCase().includes(normalizedSearch) ||
-      (transaction.description ?? "").toLowerCase().includes(normalizedSearch);
+  const recurringPeriodMonths = useMemo(() => {
+    if (hasDateFilter) {
+      return monthKeysBetween((startDateFilter || `${currentMonth}-01`).slice(0, 7), (endDateFilter || `${currentMonth}-01`).slice(0, 7));
+    }
+    if (monthFilter.length === 0) return monthOptions.map((option) => option.value);
+    return monthFilter;
+  }, [currentMonth, endDateFilter, hasDateFilter, monthFilter, monthOptions, startDateFilter]);
+  const periodTransactions = useMemo(() => {
+    const normalizedSearch = debouncedSearch.trim().toLowerCase();
+    return plan.transactions.filter((transaction) => {
+      const transactionDate = toDateInput(transaction.date);
+      const matchesMonth = hasDateFilter || monthFilter.length === 0 || monthFilter.includes(transactionMonthKey(transaction));
+      const matchesStartDate = !startDateFilter || transactionDate >= startDateFilter;
+      const matchesEndDate = !endDateFilter || transactionDate <= endDateFilter;
+      const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(transaction.category);
+      const matchesType = !typeFilter || transaction.type === typeFilter;
+      const matchesSearch =
+        !normalizedSearch ||
+        transaction.merchant.toLowerCase().includes(normalizedSearch) ||
+        (transaction.description ?? "").toLowerCase().includes(normalizedSearch);
 
-    return matchesMonth && matchesStartDate && matchesEndDate && matchesCategory && matchesType && matchesSearch;
-  });
-  const periodRecurringOccurrences = buildRecurringOccurrences(recurringTransactions, recurringPeriodMonths).filter((occurrence) => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-    const occurrenceDate = toDateInput(occurrence.date);
-    const matchesStartDate = !startDateFilter || occurrenceDate >= startDateFilter;
-    const matchesEndDate = !endDateFilter || occurrenceDate <= endDateFilter;
-    const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(occurrence.category);
-    const matchesType = !typeFilter || occurrence.type === typeFilter;
-    const matchesSearch =
-      !normalizedSearch ||
-      occurrence.merchant.toLowerCase().includes(normalizedSearch) ||
-      labels.frequency[occurrence.recurringTransaction.frequency].toLowerCase().includes(normalizedSearch);
+      return matchesMonth && matchesStartDate && matchesEndDate && matchesCategory && matchesType && matchesSearch;
+    });
+  }, [categoryFilter, debouncedSearch, endDateFilter, hasDateFilter, monthFilter, plan.transactions, startDateFilter, typeFilter]);
+  const periodRecurringOccurrences = useMemo(() => {
+    const normalizedSearch = debouncedSearch.trim().toLowerCase();
+    return buildRecurringOccurrences(recurringTransactions, recurringPeriodMonths).filter((occurrence) => {
+      const occurrenceDate = toDateInput(occurrence.date);
+      const matchesStartDate = !startDateFilter || occurrenceDate >= startDateFilter;
+      const matchesEndDate = !endDateFilter || occurrenceDate <= endDateFilter;
+      const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(occurrence.category);
+      const matchesType = !typeFilter || occurrence.type === typeFilter;
+      const matchesSearch =
+        !normalizedSearch ||
+        occurrence.merchant.toLowerCase().includes(normalizedSearch) ||
+        labels.frequency[occurrence.recurringTransaction.frequency].toLowerCase().includes(normalizedSearch);
 
-    return matchesStartDate && matchesEndDate && matchesCategory && matchesType && matchesSearch;
-  });
-  const pendingTransactions = periodTransactions.filter((transaction) => !transaction.reviewed);
-  const reviewedTransactions = periodTransactions.filter((transaction) => transaction.reviewed);
-  const visibleTransactions = periodTransactions.filter(
-    (transaction) =>
-      reviewFilter === "all" || (reviewFilter === "pending" && !transaction.reviewed) || (reviewFilter === "reviewed" && transaction.reviewed)
+      return matchesStartDate && matchesEndDate && matchesCategory && matchesType && matchesSearch;
+    });
+  }, [categoryFilter, debouncedSearch, endDateFilter, recurringPeriodMonths, recurringTransactions, startDateFilter, typeFilter]);
+  const pendingTransactions = useMemo(() => periodTransactions.filter((transaction) => !transaction.reviewed), [periodTransactions]);
+  const reviewedTransactions = useMemo(() => periodTransactions.filter((transaction) => transaction.reviewed), [periodTransactions]);
+  const visibleTransactions = useMemo(
+    () =>
+      periodTransactions.filter(
+        (transaction) =>
+          reviewFilter === "all" || (reviewFilter === "pending" && !transaction.reviewed) || (reviewFilter === "reviewed" && transaction.reviewed)
+      ),
+    [periodTransactions, reviewFilter]
   );
   const visibleRecurringOccurrences = reviewFilter === "pending" ? [] : periodRecurringOccurrences;
-  const visibleItems: TransactionAnalyticsItem[] = [
-    ...visibleTransactions.map((transaction) => ({
-      id: transaction.id,
-      date: transaction.date,
-      merchant: transaction.merchant,
-      amount: transaction.amount,
-      type: transaction.type,
-      category: transaction.category
-    })),
-    ...visibleRecurringOccurrences
-  ];
-  const expenseItems = visibleItems.filter(isExpenseLikeItem);
-  const categoryRows = Array.from(
-    expenseItems
-      .reduce((map, item) => {
-        const current = map.get(item.category) ?? {
-          id: item.category,
-          name: expenseCategoryName(plan, item.category),
-          value: 0,
-          count: 0,
-          color: expenseCategoryColor(plan, item.category)
-        };
-        current.value += item.amount;
-        current.count += 1;
-        map.set(item.category, current);
-        return map;
-      }, new Map<ExpenseCategory, { id: ExpenseCategory; name: string; value: number; count: number; color: string }>())
-      .values()
-  ).sort((a, b) => b.value - a.value);
+  const visibleItems: TransactionAnalyticsItem[] = useMemo(
+    () => [
+      ...visibleTransactions.map((transaction) => ({
+        id: transaction.id,
+        date: transaction.date,
+        merchant: transaction.merchant,
+        amount: transaction.amount,
+        type: transaction.type,
+        category: transaction.category
+      })),
+      ...visibleRecurringOccurrences
+    ],
+    [visibleRecurringOccurrences, visibleTransactions]
+  );
+  const expenseItems = useMemo(() => visibleItems.filter(isExpenseLikeItem), [visibleItems]);
+  const categoryRows = useMemo(
+    () =>
+      Array.from(
+        expenseItems
+          .reduce((map, item) => {
+            const current = map.get(item.category) ?? {
+              id: item.category,
+              name: expenseCategoryName(plan, item.category),
+              value: 0,
+              count: 0,
+              color: expenseCategoryColor(plan, item.category)
+            };
+            current.value += item.amount;
+            current.count += 1;
+            map.set(item.category, current);
+            return map;
+          }, new Map<ExpenseCategory, { id: ExpenseCategory; name: string; value: number; count: number; color: string }>())
+          .values()
+      ).sort((a, b) => b.value - a.value),
+    [expenseItems, plan]
+  );
   const timelineByMonth = !hasDateFilter && new Set(expenseItems.map((item) => toDateInput(item.date).slice(0, 7))).size > 1;
-  const timelineRows = Array.from(
-    expenseItems
-      .reduce((map, item) => {
-        const day = toDateInput(item.date);
-        const key = timelineByMonth ? day.slice(0, 7) : day;
-        if (!key) return map;
-        const current = map.get(key) ?? {
-          key,
-          label: timelineByMonth ? formatTransactionMonth(key) : formatDateDisplay(item.date).slice(0, 5),
-          value: 0
-        };
-        current.value += item.amount;
-        map.set(key, current);
-        return map;
-      }, new Map<string, { key: string; label: string; value: number }>())
-      .values()
-  ).sort((a, b) => a.key.localeCompare(b.key));
-  const totalSpend = expenseItems.reduce((sum, item) => sum + item.amount, 0);
+  const timelineRows = useMemo(
+    () =>
+      Array.from(
+        expenseItems
+          .reduce((map, item) => {
+            const day = toDateInput(item.date);
+            const key = timelineByMonth ? day.slice(0, 7) : day;
+            if (!key) return map;
+            const current = map.get(key) ?? {
+              key,
+              label: timelineByMonth ? formatTransactionMonth(key) : formatDateDisplay(item.date).slice(0, 5),
+              value: 0
+            };
+            current.value += item.amount;
+            map.set(key, current);
+            return map;
+          }, new Map<string, { key: string; label: string; value: number }>())
+          .values()
+      ).sort((a, b) => a.key.localeCompare(b.key)),
+    [expenseItems, timelineByMonth]
+  );
+  const totalSpend = useMemo(() => expenseItems.reduce((sum, item) => sum + item.amount, 0), [expenseItems]);
   const averageTicket = expenseItems.length ? totalSpend / expenseItems.length : 0;
   const reviewOptions = [
     { value: "all", label: "Todas", count: periodTransactions.length + periodRecurringOccurrences.length },
@@ -5118,10 +5228,14 @@ function TransactionsView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispa
 }
 
 function RecurringOccurrencesList({ plan, occurrences }: { plan: FinancePlan; occurrences: RecurringOccurrence[] }) {
-  const sortedOccurrences = occurrences.slice().sort((a, b) => {
-    const monthOrder = b.month.localeCompare(a.month);
-    return monthOrder || a.merchant.localeCompare(b.merchant);
-  });
+  const sortedOccurrences = useMemo(
+    () =>
+      occurrences.slice().sort((a, b) => {
+        const monthOrder = b.month.localeCompare(a.month);
+        return monthOrder || a.merchant.localeCompare(b.merchant);
+      }),
+    [occurrences]
+  );
 
   if (sortedOccurrences.length === 0) {
     return <EmptyState title="Nenhum recorrente neste filtro" />;
@@ -5156,6 +5270,10 @@ function HistoryView({
   analysis: FinancialAnalysis;
 }) {
   const [status, setStatus] = useState("");
+  const snapshots = useMemo(
+    () => plan.monthlySnapshots.slice().sort((a, b) => b.month.localeCompare(a.month)),
+    [plan.monthlySnapshots]
+  );
   const snapshot = async () => {
     try {
       const response = await apiRequest(`/plans/${plan.id}/snapshots`, {
@@ -5204,11 +5322,8 @@ function HistoryView({
             <span>Aportes</span>
             <span>Taxa</span>
           </div>
-          {plan.monthlySnapshots.length === 0 && <EmptyState title="Nenhum snapshot registrado" />}
-          {plan.monthlySnapshots
-            .slice()
-            .sort((a, b) => b.month.localeCompare(a.month))
-            .map((item) => (
+          {snapshots.length === 0 && <EmptyState title="Nenhum snapshot registrado" />}
+          {snapshots.map((item) => (
               <div className="transaction-row" key={item.id}>
                 <span>{item.month}</span>
                 <strong>{currency.format(item.totalNetWorth)}</strong>

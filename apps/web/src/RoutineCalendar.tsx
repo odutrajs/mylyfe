@@ -1,25 +1,39 @@
 import {
   addDaysToKey,
-  eventsForDay,
   monthGridKeys,
   routineContextLabel,
   weekDayKeys,
   weekdayFromKey,
   zonedClock,
+  zonedDayKey,
   type RoutineCalendarEvent,
   type RoutineCalendarLink,
   type RoutineContext,
   type RoutineTask
 } from "@mylyfe/domain";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo } from "react";
 
 const weekdayLabels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
 const hourHeight = 68;
 
 const formatDayNumber = (dayKey: string) => String(Number(dayKey.slice(8)));
+const monthTitleFormatter = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
+const weekStartFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", timeZone: "UTC" });
+const weekEndFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+const timeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+const timeFormatter = (timeZone: string) => {
+  const cached = timeFormatters.get(timeZone);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone });
+  timeFormatters.set(timeZone, formatter);
+  return formatter;
+};
+
 const formatMonthTitle = (dayKey: string) => {
   const [year = 1970, month = 1] = dayKey.split("-").map(Number);
-  return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(Date.UTC(year, month - 1, 1)));
+  return monthTitleFormatter.format(new Date(Date.UTC(year, month - 1, 1)));
 };
 
 const formatWeekTitle = (days: string[]) => {
@@ -28,16 +42,29 @@ const formatWeekTitle = (days: string[]) => {
   if (!first || !last) return "";
   const [startYear = 1970, startMonth = 1, startDay = 1] = first.split("-").map(Number);
   const [endYear = 1970, endMonth = 1, endDay = 1] = last.split("-").map(Number);
-  const start = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(new Date(Date.UTC(startYear, startMonth - 1, startDay)));
-  const end = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(
-    new Date(Date.UTC(endYear, endMonth - 1, endDay))
-  );
+  const start = weekStartFormatter.format(new Date(Date.UTC(startYear, startMonth - 1, startDay)));
+  const end = weekEndFormatter.format(new Date(Date.UTC(endYear, endMonth - 1, endDay)));
   return `${start} — ${end}`;
 };
 
 const formatTime = (iso: string, timeZone: string, allDay?: boolean) => {
   if (allDay || /^\d{4}-\d{2}-\d{2}$/.test(iso)) return "Dia inteiro";
-  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone }).format(new Date(iso));
+  return timeFormatter(timeZone).format(new Date(iso));
+};
+
+const eventsByDayKey = (events: RoutineCalendarEvent[], timeZone: string) => {
+  const map = new Map<string, RoutineCalendarEvent[]>();
+  for (const event of events) {
+    if (event.status === "cancelled") continue;
+    const startKey = event.allDay && /^\d{4}-\d{2}-\d{2}$/.test(event.start) ? event.start : zonedDayKey(new Date(event.start), timeZone);
+    const bucket = map.get(startKey);
+    if (bucket) bucket.push(event);
+    else map.set(startKey, [event]);
+  }
+  for (const bucket of map.values()) {
+    bucket.sort((left, right) => left.start.localeCompare(right.start));
+  }
+  return map;
 };
 
 const parseHex = (hex: string) => {
@@ -65,28 +92,30 @@ const ACCOUNT_PALETTE = ["#2563eb", "#0d9488", "#ea580c", "#7c3aed", "#db2777", 
 
 export const accountColor = (connectionId: string, connectionIds: string[]) => {
   const index = connectionIds.indexOf(connectionId);
-  return ACCOUNT_PALETTE[(index < 0 ? 0 : index) % ACCOUNT_PALETTE.length];
+  return ACCOUNT_PALETTE[(index < 0 ? 0 : index) % ACCOUNT_PALETTE.length] ?? ACCOUNT_PALETTE[0] ?? "#2563eb";
 };
 
-const eventMeta = (
-  event: RoutineCalendarEvent,
-  contexts: RoutineContext[],
-  links: RoutineCalendarLink[],
-  connections: Array<{ id: string; accountEmail: string }>
-) => {
-  const link = links.find((item) => item.connectionId === event.connectionId && item.externalCalendarId === event.calendarId);
+type EventLookups = {
+  contexts: RoutineContext[];
+  contextById: Map<string, RoutineContext>;
+  linkByKey: Map<string, RoutineCalendarLink>;
+  accountById: Map<string, string>;
+  connectionIds: string[];
+};
+
+const eventMeta = (event: RoutineCalendarEvent, lookups: EventLookups) => {
+  const link = lookups.linkByKey.get(`${event.connectionId}:${event.calendarId}`);
   const contextId = event.contextId || link?.contextId;
-  const context = contexts.find((item) => item.id === contextId);
-  const parent = context?.parentId ? contexts.find((item) => item.id === context.parentId) : undefined;
-  const account = connections.find((item) => item.id === event.connectionId)?.accountEmail;
-  const connectionIds = connections.map((item) => item.id);
+  const context = contextId ? lookups.contextById.get(contextId) : undefined;
+  const parent = context?.parentId ? lookups.contextById.get(context.parentId) : undefined;
+  const account = event.connectionId ? lookups.accountById.get(event.connectionId) : undefined;
   const fromAccount = Boolean(account);
   const color = fromAccount
-    ? accountColor(event.connectionId ?? "", connectionIds)
+    ? accountColor(event.connectionId ?? "", lookups.connectionIds)
     : context?.color || link?.color || "#dc2626";
   return {
     color,
-    label: routineContextLabel(contexts, contextId) || link?.name || "Agenda",
+    label: routineContextLabel(lookups.contexts, contextId) || link?.name || "Agenda",
     shortLabel: context?.parentId ? context.name : link?.name || context?.name || "Agenda",
     parentLabel: parent?.name,
     account,
@@ -159,31 +188,42 @@ export function RoutineCalendarBoard({
   onModeChange: (mode: "week" | "month") => void;
   onCursorChange: (dayKey: string) => void;
 }) {
-  const week = weekDayKeys(cursor);
-  const month = monthGridKeys(cursor);
-  const hours = Array.from({ length: Math.max(1, 22 - dayStartHour) }, (_, index) => dayStartHour + index);
+  const week = useMemo(() => weekDayKeys(cursor), [cursor]);
+  const month = useMemo(() => (mode === "month" ? monthGridKeys(cursor) : []), [mode, cursor]);
+  const hours = useMemo(
+    () => Array.from({ length: Math.max(1, 22 - dayStartHour) }, (_, index) => dayStartHour + index),
+    [dayStartHour]
+  );
   const shift = mode === "week" ? 7 : 30;
   const now = zonedClock(new Date().toISOString(), timeZone);
   const nowTop = ((now.hour * 60 + now.minute - dayStartHour * 60) / 60) * hourHeight;
   const showNow = now.hour >= dayStartHour && now.hour < 22;
+  const eventsByDay = useMemo(() => eventsByDayKey(events, timeZone), [events, timeZone]);
+  const lookups = useMemo<EventLookups>(() => {
+    const connectionIds = connections.map((item) => item.id);
+    return {
+      contexts,
+      contextById: new Map(contexts.map((context) => [context.id, context])),
+      linkByKey: new Map(links.map((link) => [`${link.connectionId}:${link.externalCalendarId}`, link])),
+      accountById: new Map(connections.map((item) => [item.id, item.accountEmail])),
+      connectionIds
+    };
+  }, [contexts, links, connections]);
 
-  const connectionIds = connections.map((item) => item.id);
-  const legend = [
-    ...connections.map((item) => ({
+  const legend = useMemo(() => {
+    const items = connections.map((item) => ({
       label: item.accountEmail,
-      color: accountColor(item.id, connectionIds)
-    })),
-    ...[
-      ...new Map(
-        events
-          .filter((event) => !connectionIds.includes(event.connectionId))
-          .map((event) => {
-            const meta = eventMeta(event, contexts, links, connections);
-            return [meta.label, { color: meta.color, label: meta.label }];
-          })
-      ).values()
-    ]
-  ];
+      color: accountColor(item.id, lookups.connectionIds)
+    }));
+    const extras = new Map<string, { color: string; label: string }>();
+    for (const event of events) {
+      const connectionId = event.connectionId;
+      if (connectionId && lookups.accountById.has(connectionId)) continue;
+      const meta = eventMeta(event, lookups);
+      if (!extras.has(meta.label)) extras.set(meta.label, { color: meta.color, label: meta.label });
+    }
+    return [...items, ...extras.values()];
+  }, [connections, events, lookups]);
 
   return (
     <section className="panel wide routine-calendar-board">
@@ -234,7 +274,7 @@ export function RoutineCalendarBoard({
             </span>
           ))}
           {month.map((dayKey) => {
-            const dayEvents = eventsForDay(events, dayKey, timeZone);
+            const dayEvents = eventsByDay.get(dayKey) ?? [];
             const dayTasks = tasks.filter((task) => task.status !== "done" && (task.scheduledDate === dayKey || task.dueDate === dayKey));
             const inMonth = dayKey.slice(0, 7) === cursor.slice(0, 7);
             const weekend = weekdayFromKey(dayKey) === 0 || weekdayFromKey(dayKey) === 6;
@@ -250,7 +290,7 @@ export function RoutineCalendarBoard({
               >
                 <strong>{formatDayNumber(dayKey)}</strong>
                 {dayEvents.slice(0, 3).map((event) => {
-                  const meta = eventMeta(event, contexts, links, connections);
+                  const meta = eventMeta(event, lookups);
                   const tone = eventTone(meta.color);
                   return (
                     <span key={event.id} className="routine-month-chip" style={{ background: tone.background, color: tone.text, borderColor: tone.border }}>
@@ -287,15 +327,15 @@ export function RoutineCalendarBoard({
                 </button>
               );
             })}
-            {week.some((dayKey) => eventsForDay(events, dayKey, timeZone).some((event) => event.allDay)) && (
+            {week.some((dayKey) => (eventsByDay.get(dayKey) ?? []).some((event) => event.allDay)) && (
               <>
                 <div className="routine-week-gutter muted">Dia</div>
                 {week.map((dayKey) => {
-                  const allDay = eventsForDay(events, dayKey, timeZone).filter((event) => event.allDay);
+                  const allDay = (eventsByDay.get(dayKey) ?? []).filter((event) => event.allDay);
                   return (
                     <div key={`allday-${dayKey}`} className={`routine-week-allday ${dayKey === todayKey ? "today" : ""}`}>
                       {allDay.map((event) => {
-                        const meta = eventMeta(event, contexts, links, connections);
+                        const meta = eventMeta(event, lookups);
                         const tone = eventTone(meta.color);
                         return (
                           <span key={event.id} className="routine-week-chip" style={{ background: tone.background, color: tone.text, borderColor: tone.border }}>
@@ -317,17 +357,18 @@ export function RoutineCalendarBoard({
                 ))}
               </div>
               {week.map((dayKey) => {
-                const timed = eventsForDay(events, dayKey, timeZone).filter((event) => !event.allDay);
+                const timed = (eventsByDay.get(dayKey) ?? []).filter((event) => !event.allDay);
                 const placed = placeEvents(timed, timeZone, dayStartHour, 22);
                 const weekend = weekdayFromKey(dayKey) === 0 || weekdayFromKey(dayKey) === 6;
                 return (
-                  <div key={`col-${dayKey}`} className={`routine-week-col ${dayKey === todayKey ? "today" : ""} ${weekend ? "weekend" : ""}`}>
-                    {hours.map((hour) => (
-                      <div key={`${dayKey}-${hour}`} className="routine-week-slot" style={{ height: hourHeight }} />
-                    ))}
+                  <div
+                    key={`col-${dayKey}`}
+                    className={`routine-week-col ${dayKey === todayKey ? "today" : ""} ${weekend ? "weekend" : ""}`}
+                    style={{ minHeight: hours.length * hourHeight, backgroundSize: `100% ${hourHeight}px` }}
+                  >
                     {dayKey === todayKey && showNow && <div className="routine-now-line" style={{ top: nowTop }} />}
                     {placed.map((item) => {
-                      const meta = eventMeta(item.event, contexts, links, connections);
+                      const meta = eventMeta(item.event, lookups);
                       const tone = eventTone(meta.color);
                       const width = `calc((100% - 8px) / ${item.cols})`;
                       const left = `calc(4px + ${item.col} * (100% - 8px) / ${item.cols})`;

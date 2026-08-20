@@ -2,6 +2,7 @@ import {
   applySecretaryInboxToPlan,
   applyShoppingInboxToPlan,
   createLifeAlert,
+  extractVerificationCode,
   findShoppingListByGroupJid,
   normalizeHomeModuleState,
   normalizePhone,
@@ -17,6 +18,7 @@ import {
 import type { PlanRepository } from "./repository.js";
 import { interpretSecretaryMessageWithAi } from "./secretary-ai.js";
 import { enqueueJobs, getOutbox, readLegacySecretaryState, saveOutbox } from "./secretary-store.js";
+import { confirmPhoneVerification, findPlanPersonByPhone } from "./phone-verify-service.js";
 
 const locks = new Map<string, Promise<unknown>>();
 
@@ -215,6 +217,9 @@ export const markJobSent = async (jobIdValue: string) => {
 const heardReply = (text: string, reply: string, via?: string) =>
   via === "audio" && reply ? `Ouvi: *${text}*\n\n${reply}` : reply;
 
+const unknownPhoneReply =
+  "Nao te reconheci neste WhatsApp. Entra no MyLyfe, cadastra este numero em Secretaria > Preferencias e confirma o codigo que eu mandar.";
+
 export const handleSecretaryInbox = async (
   repository: PlanRepository,
   from: string,
@@ -223,26 +228,54 @@ export const handleSecretaryInbox = async (
   via?: string
 ) => {
   const phone = normalizePhone(from);
-  const planIds = await repository.listIds();
-
-  for (const planId of planIds) {
-    const plan = await repository.get(planId);
-    const person = primaryPerson(plan);
-    if (!phonesMatch(person?.phone, phone)) continue;
-
-    return withLock(planId, async () => {
-      const current = await readState(repository, planId);
-      const intents = await interpretSecretaryMessageWithAi(text, now, current.settings.timezone).catch(() => null);
-      const inbox = applySecretaryInboxToPlan({ ...plan, secretary: current }, text, now, person?.name, intents ?? undefined);
-      await repository.save(inbox.plan);
-      const reply = heardReply(text, inbox.reply, via);
-      const jobs = toJobs(planId, phone, [{ alertId: inbox.matchedAlertId, text: reply, kind: "ack" }]);
+  const code = extractVerificationCode(text);
+  if (code) {
+    try {
+      const confirmed = await confirmPhoneVerification(repository, { phone, code });
+      const reply = `Pronto, ${confirmed.person?.name || "tudo certo"}. Este WhatsApp ficou ligado a sua conta. Pode mandar gastos, reunioes e consultas por aqui.`;
+      const jobs = toJobs(confirmed.plan.id, phone, [{ text: reply, kind: "ack" }]);
       await enqueueJobs(jobs);
-      return { planId, state: inbox.plan.secretary, reply, jobs, matchedAlertId: inbox.matchedAlertId };
-    });
+      return { planId: confirmed.plan.id, state: confirmed.plan.secretary, reply, jobs, matchedAlertId: undefined };
+    } catch {
+      // fall through to normal inbox or unknown-number help
+    }
   }
 
-  return { planId: null, state: null as SecretaryModuleState | null, reply: "", jobs: [] as SecretaryJob[], matchedAlertId: undefined };
+  const matched = await findPlanPersonByPhone(repository, phone);
+  if (!matched) {
+    const reply = unknownPhoneReply;
+    const jobs = toJobs("", phone, [{ text: reply, kind: "ack" }]);
+    await enqueueJobs(jobs);
+    return { planId: null, state: null as SecretaryModuleState | null, reply, jobs, matchedAlertId: undefined };
+  }
+
+  const { plan, person } = matched;
+  if (!person.whatsappVerifiedAt) {
+    const reply =
+      "Recebi sua mensagem, mas este WhatsApp ainda nao foi confirmado. Entra no MyLyfe, pede o codigo em Secretaria > Preferencias e me manda os 6 digitos.";
+    const jobs = toJobs(plan.id, phone, [{ text: reply, kind: "ack" }]);
+    await enqueueJobs(jobs);
+    return { planId: plan.id, state: plan.secretary, reply, jobs, matchedAlertId: undefined };
+  }
+
+  return withLock(plan.id, async () => {
+    const current = await readState(repository, plan.id);
+    const latest = await repository.get(plan.id);
+    const intents = await interpretSecretaryMessageWithAi(text, now, current.settings.timezone).catch(() => null);
+    const inbox = applySecretaryInboxToPlan(
+      { ...latest, secretary: current },
+      text,
+      now,
+      person.name,
+      intents ?? undefined,
+      person.id
+    );
+    await repository.save(inbox.plan);
+    const reply = heardReply(text, inbox.reply, via);
+    const jobs = toJobs(plan.id, phone, [{ alertId: inbox.matchedAlertId, text: reply, kind: "ack" }]);
+    await enqueueJobs(jobs);
+    return { planId: plan.id, state: inbox.plan.secretary, reply, jobs, matchedAlertId: inbox.matchedAlertId };
+  });
 };
 
 export const handleShoppingGroupInbox = async (

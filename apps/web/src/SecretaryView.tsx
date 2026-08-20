@@ -9,6 +9,7 @@ import { alertKindLabels } from "@mylyfe/domain";
 import { Bell, LogOut, MessageCircle, Pause, Play, Plus, SlidersHorizontal, Smartphone, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { MoneyField } from "./MoneyField";
+import { WhatsAppPhoneField } from "./WhatsAppPhoneField";
 import { apiRequest, preciseCurrency, uid } from "./lib";
 
 export type SecretarySection = "home" | "alerts" | "whatsapp" | "settings";
@@ -211,21 +212,6 @@ export function SecretaryView({
     };
   }, [plan.id]);
 
-  const updatePhone = (phone: string) => {
-    if (!primary) return;
-    setPlan((current) =>
-      current
-        ? {
-            ...current,
-            profile: {
-              ...current.profile,
-              people: current.profile.people.map((person) => (person.id === primary.id ? { ...person, phone } : person))
-            }
-          }
-        : current
-    );
-  };
-
   const resetWhatsAppSession = async (confirmMessage?: string) => {
     if (disconnecting) return;
     if (confirmMessage && !window.confirm(confirmMessage)) {
@@ -403,10 +389,28 @@ export function SecretaryView({
             </div>
           </header>
           <div className="form-grid">
-            <label className="field">
-              <span>Seu WhatsApp pessoal</span>
-              <input value={primary?.phone ?? ""} placeholder="11 99999-0000" onChange={(event) => updatePhone(event.target.value)} />
-            </label>
+            {primary && (
+              <WhatsAppPhoneField
+                personId={primary.id}
+                phone={primary.phone ?? ""}
+                verifiedAt={primary.whatsappVerifiedAt}
+                onPhoneChange={(phone, verifiedAt) => {
+                  setPlan((current) =>
+                    current
+                      ? {
+                          ...current,
+                          profile: {
+                            ...current.profile,
+                            people: current.profile.people.map((person) =>
+                              person.id === primary.id ? { ...person, phone, whatsappVerifiedAt: verifiedAt } : person
+                            )
+                          }
+                        }
+                      : current
+                  );
+                }}
+              />
+            )}
             <label className="field">
               <span>Secretaria ativa</span>
               <select

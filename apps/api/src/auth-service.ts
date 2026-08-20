@@ -1,7 +1,8 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
-import type { FinancePlan } from "@mylyfe/domain";
+import { isValidWhatsappPhone, normalizePhone, type FinancePlan } from "@mylyfe/domain";
 import type { PlanRepository } from "./repository.js";
+import { findPlanPersonByPhone } from "./phone-verify-service.js";
 import {
   createSessionRecord,
   deleteSessionRecord,
@@ -104,21 +105,30 @@ const resolvePersonalPlanId = async (repository: PlanRepository, email: string) 
   return preferredId;
 };
 
-const attachOwnerContact = async (repository: PlanRepository, planId: string, email: string, name: string) => {
+const attachOwnerContact = async (
+  repository: PlanRepository,
+  planId: string,
+  email: string,
+  name: string,
+  phone?: string
+) => {
   const plan = await repository.get(planId);
   const primary = plan.profile.people.find((person) => person.role === "primary") ?? plan.profile.people[0];
   if (!primary) return plan;
 
   const nextName = primary.name.trim() || name;
   const nextEmail = primary.email?.trim() ? primary.email : email;
-  if (primary.name === nextName && primary.email === nextEmail) return plan;
+  const nextPhone = primary.phone?.trim() ? primary.phone : phone?.trim();
+  if (primary.name === nextName && primary.email === nextEmail && primary.phone === nextPhone) return plan;
 
   return repository.save({
     ...plan,
     profile: {
       ...plan.profile,
       people: plan.profile.people.map((person) =>
-        person.id === primary.id ? { ...person, name: nextName, email: nextEmail } : person
+        person.id === primary.id
+          ? { ...person, name: nextName, email: nextEmail, phone: nextPhone || person.phone }
+          : person
       )
     }
   });
@@ -131,7 +141,7 @@ const readToken = (header?: string) => {
 
 export const registerUser = async (
   repository: PlanRepository,
-  input: { name?: string; email?: string; password?: string }
+  input: { name?: string; email?: string; password?: string; phone?: string }
 ) => {
   const email = normalizeEmail(input.email ?? "");
   const name = (input.name ?? "").trim();
@@ -145,8 +155,19 @@ export const registerUser = async (
     throw new AuthError("Ja existe uma conta com este e-mail. Entre com a senha.", 409);
   }
 
+  let phone: string | undefined;
+  if (input.phone?.trim()) {
+    phone = normalizePhone(input.phone);
+    if (!isValidWhatsappPhone(phone)) {
+      throw new AuthError("Informe um WhatsApp valido com DDD. Ex: 41 99999-0000.");
+    }
+    if (await findPlanPersonByPhone(repository, phone)) {
+      throw new AuthError("Este WhatsApp ja esta ligado a outra conta MyLyfe.");
+    }
+  }
+
   const personalPlanId = await resolvePersonalPlanId(repository, email);
-  await attachOwnerContact(repository, personalPlanId, email, name);
+  await attachOwnerContact(repository, personalPlanId, email, name, phone);
   const now = new Date().toISOString();
   const secret = await hashPassword(password);
   const user = await saveUser({

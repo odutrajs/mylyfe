@@ -7,7 +7,6 @@ import {
   mergeAgendaEvents,
   normalizeRoutineModuleState,
   removeRoutineStepChild,
-  syncRoutineWithHealthAppointments,
   rootRoutineContexts,
   routineContextIds,
   routineContextKindLabels,
@@ -147,7 +146,7 @@ export function RoutineView({
   setPlan: Dispatch<SetStateAction<FinancePlan | null>>;
   section: RoutineSection;
 }) {
-  const routine = normalizeRoutineModuleState(plan.routine);
+  const routine = useMemo(() => normalizeRoutineModuleState(plan.routine), [plan.routine]);
   const [capture, setCapture] = useState("");
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("today");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -188,6 +187,7 @@ export function RoutineView({
     setMicrosoftConfigured(payload.microsoftConfigured !== false);
     setPlan((current) => {
       if (!current) return current;
+      if (payload.updatedAt && current.routine?.updatedAt === payload.updatedAt) return current;
       return {
         ...current,
         routine: normalizeRoutineModuleState({
@@ -218,8 +218,8 @@ export function RoutineView({
 
   const dayKey = zonedDayKey(new Date(), routine.settings.timezone);
   const agendaEvents = useMemo(
-    () => mergeAgendaEvents(events, syncRoutineWithHealthAppointments(plan).routine.localEvents),
-    [events, plan]
+    () => mergeAgendaEvents(events, plan.routine?.localEvents ?? []),
+    [events, plan.routine?.localEvents]
   );
   const cursor = calendarCursor || dayKey;
   const selectedTask = routine.tasks.find((task) => task.id === selectedTaskId) ?? null;
@@ -243,6 +243,12 @@ export function RoutineView({
       return contextId ? ids.has(contextId) : false;
     });
   }, [agendaEvents, agendaFilter, routine.calendarLinks, routine.contexts]);
+
+  const calendarTasks = useMemo(() => {
+    if (agendaFilter === "all") return routine.tasks;
+    const ids = routineContextIds(routine.contexts, agendaFilter);
+    return routine.tasks.filter((task) => ids.includes(task.contextId ?? ""));
+  }, [agendaFilter, routine.contexts, routine.tasks]);
 
   const upsertTask = (task: RoutineTask) => {
     applyRoutine({
@@ -456,10 +462,7 @@ export function RoutineView({
           timeZone={routine.settings.timezone}
           dayStartHour={routine.settings.dayStartHour}
           events={filteredAgendaEvents}
-          tasks={routine.tasks.filter((task) => {
-            if (agendaFilter === "all") return true;
-            return routineContextIds(routine.contexts, agendaFilter).includes(task.contextId ?? "");
-          })}
+          tasks={calendarTasks}
           contexts={routine.contexts}
           links={routine.calendarLinks}
           connections={connections}

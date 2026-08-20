@@ -362,13 +362,22 @@ export const pickRoutineModuleState = (
   return normalizeRoutineModuleState(incomingTime >= existingTime ? incoming : existing);
 };
 
-export const zonedDayKey = (date: Date, timeZone: string) =>
-  new Intl.DateTimeFormat("en-CA", {
+const zonedDayKeyFormatters = new Map<string, Intl.DateTimeFormat>();
+
+const zonedDayKeyFormatter = (timeZone: string) => {
+  const cached = zonedDayKeyFormatters.get(timeZone);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
-  }).format(date);
+  });
+  zonedDayKeyFormatters.set(timeZone, formatter);
+  return formatter;
+};
+
+export const zonedDayKey = (date: Date, timeZone: string) => zonedDayKeyFormatter(timeZone).format(date);
 
 export const taskSubtaskProgress = (task: RoutineTask) => {
   const leaves = task.subtasks.flatMap(stepLeaves);

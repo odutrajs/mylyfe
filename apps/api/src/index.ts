@@ -23,6 +23,7 @@ import {
   sessionFromToken,
   updateAuthSession
 } from "./auth-service.js";
+import { confirmPhoneVerification, PhoneVerifyError, sanitizePlanWhatsappIdentity, startPhoneVerification } from "./phone-verify-service.js";
 import {
   deletePlanAlert,
   handleSecretaryInbox,
@@ -116,7 +117,7 @@ app.post(
   "/api/auth/register",
   asyncRoute(async (request, response) => {
     try {
-      response.status(201).json(await registerUser(repository, request.body as { name?: string; email?: string; password?: string }));
+      response.status(201).json(await registerUser(repository, request.body as { name?: string; email?: string; password?: string; phone?: string }));
     } catch (error) {
       if (error instanceof AuthError) {
         response.status(error.status).json({ error: error.message });
@@ -192,7 +193,7 @@ app.put(
   "/api/plans/:id",
   asyncRoute(async (request, response) => {
     const id = routeParam(request.params.id, "primary");
-    const plan = request.body as FinancePlan;
+    const plan = await sanitizePlanWhatsappIdentity(repository, id, request.body as FinancePlan);
     const saved = await repository.save({
       ...plan,
       id
@@ -391,6 +392,53 @@ app.post(
       return;
     }
     response.json(job);
+  })
+);
+
+app.post(
+  "/api/secretary/phone/start",
+  asyncRoute(async (request, response) => {
+    try {
+      const current = await sessionFromToken(request.headers.authorization);
+      const body = request.body as { phone?: string; personId?: string };
+      response.json(
+        await startPhoneVerification(repository, {
+          planId: current.session.planId,
+          personId: body.personId,
+          email: current.session.email,
+          phone: body.phone
+        })
+      );
+    } catch (error) {
+      if (error instanceof AuthError || error instanceof PhoneVerifyError) {
+        response.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/secretary/phone/confirm",
+  asyncRoute(async (request, response) => {
+    try {
+      const current = await sessionFromToken(request.headers.authorization);
+      const body = request.body as { phone?: string; code?: string };
+      const confirmed = await confirmPhoneVerification(repository, { ...body, planId: current.session.planId });
+      response.json({
+        ok: true,
+        phone: confirmed.phone,
+        person: confirmed.person,
+        whatsappVerifiedAt: confirmed.person?.whatsappVerifiedAt
+      });
+    } catch (error) {
+      if (error instanceof AuthError || error instanceof PhoneVerifyError) {
+        response.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
   })
 );
 

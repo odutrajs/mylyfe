@@ -3845,9 +3845,12 @@ button.module-overview-card:hover {
 }
 
 .routine-week-allday.today,
-.routine-week-col.today,
 .routine-week-head.today {
   background: #f4f8f0;
+}
+
+.routine-week-col.today {
+  background-color: #f4f8f0;
 }
 
 .routine-week-grid {
@@ -3876,14 +3879,21 @@ button.module-overview-card:hover {
 .routine-week-col {
   position: relative;
   border-left: 1px solid #eef2ea;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(68px - 1px),
+    #f1f4ee calc(68px - 1px),
+    #f1f4ee 68px
+  );
 }
 
 .routine-week-col.weekend {
-  background: #f8f9f6;
+  background-color: #f8f9f6;
 }
 
 .routine-week-col.today.weekend {
-  background: #f4f8f0;
+  background-color: #f4f8f0;
 }
 
 .routine-week-slot {

@@ -389,7 +389,8 @@ export const addManualExpense = (
   plan: FinancePlan,
   intent: Extract<SecretaryIntent, { type: "add_expense" }>,
   now = new Date(),
-  timeZone = "America/Sao_Paulo"
+  timeZone = "America/Sao_Paulo",
+  personId?: string
 ) => {
   const known = KNOWN_MERCHANTS.find((item) => item.pattern.test(fold(intent.merchant)));
   const date = intent.date || dateKey(now, timeZone);
@@ -409,6 +410,7 @@ export const addManualExpense = (
     amount: intent.amount,
     type: "expense" as const,
     audience: classified.audience,
+    spentByPersonId: personId,
     nature: classified.nature,
     category: known?.category || intent.category || classified.category,
     confidence: 1,

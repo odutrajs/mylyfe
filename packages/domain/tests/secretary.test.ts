@@ -6,7 +6,9 @@ import {
   createLifeAlert,
   defaultSecretaryModuleState,
   defaultSecretarySettings,
+  extractVerificationCode,
   inQuietHours,
+  isValidWhatsappPhone,
   nextOccurrence,
   normalizePhone,
   parseReply,
@@ -24,6 +26,10 @@ describe("phone normalization", () => {
     expect(normalizePhone("11 99999-1234")).toBe("5511999991234");
     expect(normalizePhone("+55 (11) 99999-1234")).toBe("5511999991234");
     expect(phonesMatch("11999991234", "55 11 99999-1234")).toBe(true);
+    expect(isValidWhatsappPhone("41 98415-276")).toBe(true);
+    expect(isValidWhatsappPhone("123")).toBe(false);
+    expect(extractVerificationCode("meu codigo e 123456")).toBe("123456");
+    expect(extractVerificationCode("oi")).toBe("");
   });
 });
 

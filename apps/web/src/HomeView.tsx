@@ -29,7 +29,7 @@ export function HomeView({
   setPlan: Dispatch<SetStateAction<FinancePlan | null>>;
   section?: HomeSection;
 }) {
-  const home = normalizeHomeModuleState(plan.home);
+  const home = useMemo(() => normalizeHomeModuleState(plan.home), [plan.home]);
   const list = defaultShoppingListOf(home);
   const listId = list?.id ?? DEFAULT_SHOPPING_LIST_ID;
   const [draft, setDraft] = useState("");

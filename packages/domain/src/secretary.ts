@@ -89,8 +89,12 @@ const pad = (value: number) => String(value).padStart(2, "0");
 const getPart = (parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes) =>
   Number(parts.find((part) => part.type === type)?.value ?? 0);
 
-export const zonedParts = (date: Date, timeZone: string) => {
-  const parts = new Intl.DateTimeFormat("en-US", {
+const zonedPartsFormatters = new Map<string, Intl.DateTimeFormat>();
+
+const zonedPartsFormatter = (timeZone: string) => {
+  const cached = zonedPartsFormatters.get(timeZone);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
     month: "2-digit",
@@ -100,7 +104,13 @@ export const zonedParts = (date: Date, timeZone: string) => {
     second: "2-digit",
     hourCycle: "h23",
     weekday: "short"
-  }).formatToParts(date);
+  });
+  zonedPartsFormatters.set(timeZone, formatter);
+  return formatter;
+};
+
+export const zonedParts = (date: Date, timeZone: string) => {
+  const parts = zonedPartsFormatter(timeZone).formatToParts(date);
 
   return {
     year: getPart(parts, "year"),
@@ -149,6 +159,16 @@ export const phonesMatch = (left?: string | null, right?: string | null) => {
   const a = normalizePhone(left);
   const b = normalizePhone(right);
   return Boolean(a && b && a === b);
+};
+
+export const isValidWhatsappPhone = (value?: string | null) => {
+  const digits = normalizePhone(value);
+  return digits.startsWith("55") && (digits.length === 12 || digits.length === 13);
+};
+
+export const extractVerificationCode = (text: string) => {
+  const digits = text.replace(/\D/g, "");
+  return /^\d{6}$/.test(digits) ? digits : "";
 };
 
 export const whatsappJid = (phone: string) => {
