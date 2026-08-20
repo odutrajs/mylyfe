@@ -1,0 +1,55 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Hostinger VPS
+        env:
+          HOSTINGER_API_KEY: ${{ secrets.HOSTINGER_API_KEY }}
+          HOSTINGER_VM_ID: ${{ vars.HOSTINGER_VM_ID }}
+          PROJECT_NAME: mylyfe
+          CONTENT_URL: https://github.com/${{ github.repository }}
+          PROJECT_ENVIRONMENT: |
+            SECRETARY_TOKEN=${{ secrets.SECRETARY_TOKEN }}
+            ROUTINE_TOKEN_KEY=${{ secrets.ROUTINE_TOKEN_KEY }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            OPENAI_MODEL=${{ vars.OPENAI_MODEL }}
+            GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+            GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+            GOOGLE_REDIRECT_URI=${{ vars.GOOGLE_REDIRECT_URI }}
+            MICROSOFT_REDIRECT_URI=${{ vars.MICROSOFT_REDIRECT_URI }}
+            WEB_ORIGIN=${{ vars.WEB_ORIGIN }}
+            CERTBOT_EMAIL=${{ vars.CERTBOT_EMAIL }}
+        run: bash .github/scripts/deploy-hostinger.sh
+
+      - name: Verify production
+        env:
+          HOSTINGER_API_KEY: ${{ secrets.HOSTINGER_API_KEY }}
+          HOSTINGER_VM_ID: ${{ vars.HOSTINGER_VM_ID }}
+          PROJECT_NAME: mylyfe
+          HEALTH_URL: https://feedeo.com.br/api/health
+        run: bash .github/scripts/verify-hostinger-containers.sh
