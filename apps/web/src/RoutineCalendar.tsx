@@ -50,7 +50,7 @@ const parseHex = (hex: string) => {
   };
 };
 
-const eventTone = (hex: string) => {
+const eventTone = (hex?: string) => {
   const { r, g, b } = parseHex(hex || "#64748b");
   const rail = (value: number) => Math.round(value * 0.72);
   return {
@@ -82,7 +82,7 @@ const eventMeta = (
   const connectionIds = connections.map((item) => item.id);
   const fromAccount = Boolean(account);
   const color = fromAccount
-    ? accountColor(event.connectionId, connectionIds)
+    ? accountColor(event.connectionId ?? "", connectionIds)
     : context?.color || link?.color || "#dc2626";
   return {
     color,
