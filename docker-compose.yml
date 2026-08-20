@@ -1,8 +1,7 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    image: ghcr.io/odutrajs/mylyfe-api:latest
+    pull_policy: always
     restart: unless-stopped
     environment:
       API_PORT: "3333"
@@ -25,9 +24,8 @@ services:
       - "3333"
 
   secretary:
-    build:
-      context: .
-      dockerfile: apps/secretary/Dockerfile
+    image: ghcr.io/odutrajs/mylyfe-secretary:latest
+    pull_policy: always
     restart: unless-stopped
     environment:
       SECRETARY_PORT: "3334"
@@ -40,9 +38,8 @@ services:
       - "3334"
 
   nginx:
-    build:
-      context: .
-      dockerfile: nginx/Dockerfile
+    image: ghcr.io/odutrajs/mylyfe-nginx:latest
+    pull_policy: always
     restart: unless-stopped
     ports:
       - "80:80"
