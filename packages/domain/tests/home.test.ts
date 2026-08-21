@@ -30,6 +30,8 @@ describe("shopping command parser", () => {
     expect(parseShoppingCommand("maionese?")).toEqual({ kind: "ignore" });
     expect(parseShoppingCommand("olha isso https://exemplo.com")).toEqual({ kind: "ignore" });
     expect(parseShoppingCommand("amanha a gente decide o que comprar no mercado")).toEqual({ kind: "ignore" });
+    expect(parseShoppingCommand("Agua Com Gas na lista.")).toEqual({ kind: "ignore" });
+    expect(parseShoppingCommand("Lista do mercado:\n- Vinagre")).toEqual({ kind: "ignore" });
   });
 });
 

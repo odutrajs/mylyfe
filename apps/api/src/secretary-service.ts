@@ -46,16 +46,24 @@ const jobId = () => `job-${Date.now().toString(36)}-${Math.random().toString(36)
 const primaryPerson = (plan: Awaited<ReturnType<PlanRepository["get"]>>) =>
   plan.profile.people.find((person) => person.role === "primary") ?? plan.profile.people[0];
 
-const toJobs = (planId: string, destination: string, items: Array<{ alertId?: string; text: string; kind: SecretaryJob["kind"] }>) =>
-  items.map((item) => ({
-    id: jobId(),
-    planId,
-    alertId: item.alertId,
-    to: destination.includes("@g.us") ? destination : normalizePhone(destination),
-    text: item.text,
-    kind: item.kind,
-    createdAt: new Date().toISOString()
-  }));
+const toJobs = (
+  planId: string,
+  destination: string,
+  items: Array<{ alertId?: string; text: string; kind: SecretaryJob["kind"] }>,
+  claimed = false
+) =>
+  items
+    .filter((item) => item.text.trim())
+    .map((item) => ({
+      id: jobId(),
+      planId,
+      alertId: item.alertId,
+      to: destination.includes("@g.us") ? destination : normalizePhone(destination),
+      text: item.text,
+      kind: item.kind,
+      createdAt: new Date().toISOString(),
+      claimedAt: claimed ? new Date().toISOString() : undefined
+    }));
 
 const readState = async (repository: PlanRepository, planId: string) => {
   const plan = await repository.get(planId);
@@ -205,7 +213,22 @@ export const tickSecretary = async (repository: PlanRepository, now = new Date()
   return { created: jobs, pending };
 };
 
-export const pendingSecretaryJobs = async () => (await getOutbox()).filter((job) => !job.sentAt);
+const CLAIM_STALE_MS = 2 * 60 * 1000;
+
+export const pendingSecretaryJobs = async () => {
+  const jobs = await getOutbox();
+  const now = Date.now();
+  const claimable = jobs.filter((job) => {
+    if (job.sentAt || !job.text?.trim()) return false;
+    if (!job.claimedAt) return true;
+    return now - Date.parse(job.claimedAt) > CLAIM_STALE_MS;
+  });
+  if (!claimable.length) return [];
+  const claimedAt = new Date().toISOString();
+  const claimedIds = new Set(claimable.map((job) => job.id));
+  await saveOutbox(jobs.map((job) => (claimedIds.has(job.id) ? { ...job, claimedAt } : job)));
+  return claimable;
+};
 
 export const markJobSent = async (jobIdValue: string) => {
   const jobs = await getOutbox();
@@ -233,7 +256,7 @@ export const handleSecretaryInbox = async (
     try {
       const confirmed = await confirmPhoneVerification(repository, { phone, code });
       const reply = `Pronto, ${confirmed.person?.name || "tudo certo"}. Este WhatsApp ficou ligado a sua conta. Pode mandar gastos, reunioes e consultas por aqui.`;
-      const jobs = toJobs(confirmed.plan.id, phone, [{ text: reply, kind: "ack" }]);
+      const jobs = toJobs(confirmed.plan.id, phone, [{ text: reply, kind: "ack" }], true);
       await enqueueJobs(jobs);
       return { planId: confirmed.plan.id, state: confirmed.plan.secretary, reply, jobs, matchedAlertId: undefined };
     } catch {
@@ -244,7 +267,7 @@ export const handleSecretaryInbox = async (
   const matched = await findPlanPersonByPhone(repository, phone);
   if (!matched) {
     const reply = unknownPhoneReply;
-    const jobs = toJobs("", phone, [{ text: reply, kind: "ack" }]);
+    const jobs = toJobs("", phone, [{ text: reply, kind: "ack" }], true);
     await enqueueJobs(jobs);
     return { planId: null, state: null as SecretaryModuleState | null, reply, jobs, matchedAlertId: undefined };
   }
@@ -253,7 +276,7 @@ export const handleSecretaryInbox = async (
   if (!person.whatsappVerifiedAt) {
     const reply =
       "Recebi sua mensagem, mas este WhatsApp ainda nao foi confirmado. Entra no MyLyfe, pede o codigo em Secretaria > Preferencias e me manda os 6 digitos.";
-    const jobs = toJobs(plan.id, phone, [{ text: reply, kind: "ack" }]);
+    const jobs = toJobs(plan.id, phone, [{ text: reply, kind: "ack" }], true);
     await enqueueJobs(jobs);
     return { planId: plan.id, state: plan.secretary, reply, jobs, matchedAlertId: undefined };
   }
@@ -272,7 +295,7 @@ export const handleSecretaryInbox = async (
     );
     await repository.save(inbox.plan);
     const reply = heardReply(text, inbox.reply, via);
-    const jobs = toJobs(plan.id, phone, [{ alertId: inbox.matchedAlertId, text: reply, kind: "ack" }]);
+    const jobs = toJobs(plan.id, phone, [{ alertId: inbox.matchedAlertId, text: reply, kind: "ack" }], true);
     await enqueueJobs(jobs);
     return { planId: plan.id, state: inbox.plan.secretary, reply, jobs, matchedAlertId: inbox.matchedAlertId };
   });
@@ -314,7 +337,7 @@ export const handleShoppingGroupInbox = async (
 
       await repository.save(inbox.plan);
       const reply = heardReply(text.trim(), inbox.reply, via);
-      const jobs = toJobs(planId, jid, [{ text: reply, kind: "ack" }]);
+      const jobs = toJobs(planId, jid, [{ text: reply, kind: "ack" }], true);
       await enqueueJobs(jobs);
       return { planId, reply, jobs, ignored: false };
     });

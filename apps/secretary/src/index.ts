@@ -49,6 +49,29 @@ const requireToken: express.RequestHandler = (request, response, next) => {
 
 const digits = (value: string) => value.replace(/\D/g, "");
 const lidByPhone = new Map<string, string>();
+const seenInbound = new Map<string, number>();
+const sendingJobs = new Set<string>();
+const INBOUND_TTL_MS = 10 * 60 * 1000;
+
+const rememberInbound = (id?: string | null) => {
+  if (!id) return false;
+  const now = Date.now();
+  if (seenInbound.has(id)) return false;
+  seenInbound.set(id, now);
+  if (seenInbound.size > 400) {
+    for (const [key, at] of seenInbound) {
+      if (now - at > INBOUND_TTL_MS) seenInbound.delete(key);
+    }
+  }
+  return true;
+};
+
+const isFreshInbound = (message: WAMessage) => {
+  const timestamp = Number(message.messageTimestamp);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return true;
+  const ageMs = Date.now() - timestamp * 1000;
+  return ageMs >= 0 && ageMs < 90_000;
+};
 
 const jidToPhone = (jid?: string | null) => {
   if (!jid || jid.endsWith("@g.us") || jid.endsWith("@lid") || jid === "status@broadcast") return "";
@@ -175,13 +198,24 @@ const sendText = async (to: string, text: string) => {
   await socket.sendMessage(destination, { text });
 };
 
+const deliverJob = async (job: { id: string; to: string; text: string }) => {
+  if (!job.id || !job.text?.trim() || sendingJobs.has(job.id)) return;
+  sendingJobs.add(job.id);
+  try {
+    await sendText(job.to, job.text);
+    await apiFetch(`/api/secretary/jobs/${job.id}/sent`, { method: "POST" });
+  } catch (error) {
+    sendingJobs.delete(job.id);
+    throw error;
+  }
+};
+
 const deliverJobs = async () => {
   if (connectionState !== "connected") return;
   const payload = (await apiFetch("/api/secretary/jobs")) as { jobs?: Array<{ id: string; to: string; text: string }> };
   for (const job of payload.jobs ?? []) {
     try {
-      await sendText(job.to, job.text);
-      await apiFetch(`/api/secretary/jobs/${job.id}/sent`, { method: "POST" });
+      await deliverJob(job);
     } catch (error) {
       lastError = error instanceof Error ? error.message : "Falha ao enviar mensagem.";
       logger.warn({ err: error, jobId: job.id }, "secretary job failed");
@@ -197,8 +231,7 @@ const forwardInbox = async (from: string, text: string, groupJid?: string, via?:
 
   for (const job of result.jobs ?? []) {
     try {
-      await sendText(job.to, job.text);
-      await apiFetch(`/api/secretary/jobs/${job.id}/sent`, { method: "POST" });
+      await deliverJob(job);
     } catch (error) {
       lastError = error instanceof Error ? error.message : "Falha ao responder.";
     }
@@ -343,6 +376,7 @@ const startSocket = async () => {
     if (generation !== socketGeneration) return;
     for (const message of messages) {
       if (message.key.fromMe) continue;
+      if (!rememberInbound(message.key.id) || !isFreshInbound(message)) continue;
       const from = senderPhone(message);
       const text = messageText(message);
       const audio = inboundAudio(message);

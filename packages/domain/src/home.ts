@@ -86,6 +86,14 @@ export const parseShoppingCommand = (text: string): ParsedShoppingCommand => {
   }
 
   if (/^(lista|listar|o que falta|o q falta)$/.test(folded)) return { kind: "list" };
+  if (
+    folded.startsWith("lista do mercado") ||
+    / na lista\.?$/.test(folded) ||
+    / ja esta na lista\.?$/.test(folded) ||
+    /^(marquei |tirei |nao achei )/.test(folded)
+  ) {
+    return { kind: "ignore" };
+  }
 
   const buy = folded.match(/^(?:comprei|peguei|ja (?:peguei|comprei)|ja pega)\s+(.+)$/);
   if (buy?.[1]) {

@@ -18,6 +18,7 @@ export interface SecretaryJob {
   kind: SecretaryOutboundKind;
   createdAt: string;
   sentAt?: string;
+  claimedAt?: string;
 }
 
 export interface ParsedReply {
