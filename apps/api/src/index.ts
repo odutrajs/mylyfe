@@ -94,9 +94,21 @@ const routeParam = (value: string | string[] | undefined, fallback: string) =>
 
 const webOrigins = (process.env.WEB_ORIGIN ?? "")
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 app.use(cors({ origin: webOrigins.length > 0 ? webOrigins : true }));
+
+const requestWebOrigin = (request: express.Request) => {
+  const origin = request.get("origin")?.trim();
+  if (origin) return origin.replace(/\/$/, "");
+  const referer = request.get("referer");
+  if (!referer) return undefined;
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return undefined;
+  }
+};
 app.use(express.json({ limit: "5mb" }));
 
 const asyncRoute =
@@ -534,7 +546,7 @@ app.get(
   "/api/routine/google/connect",
   asyncRoute(async (request, response) => {
     try {
-      response.json(await startGoogleConnect(String(request.query.planId ?? "")));
+      response.json(await startGoogleConnect(String(request.query.planId ?? ""), requestWebOrigin(request)));
     } catch (error) {
       if (error instanceof RoutineError) {
         response.status(error.status).json({ error: error.message });
@@ -569,7 +581,7 @@ app.get(
   "/api/routine/microsoft/connect",
   asyncRoute(async (request, response) => {
     try {
-      response.json(await startMicrosoftConnect(String(request.query.planId ?? "")));
+      response.json(await startMicrosoftConnect(String(request.query.planId ?? ""), requestWebOrigin(request)));
     } catch (error) {
       if (error instanceof RoutineError) {
         response.status(error.status).json({ error: error.message });
