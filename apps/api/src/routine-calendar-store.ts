@@ -48,6 +48,7 @@ export type RoutineCalendarConnectionPublic = Omit<RoutineCalendarConnection, "r
 export type RoutineOAuthState = {
   id: string;
   planId: string;
+  returnOrigin?: string;
   createdAt: string;
 };
 

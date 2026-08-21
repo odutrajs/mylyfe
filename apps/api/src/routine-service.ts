@@ -41,11 +41,32 @@ export class RoutineError extends Error {
 
 const nowIso = () => new Date().toISOString();
 
+const parseWebOrigins = (value = process.env.WEB_ORIGIN ?? "http://localhost:5173") =>
+  value
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter((origin) => /^https?:\/\/[^,\s/]+$/i.test(origin));
+
+const resolveWebOrigin = (preferred?: string) => {
+  const origins = parseWebOrigins();
+  const normalized = preferred?.trim().replace(/\/$/, "");
+  if (normalized && origins.includes(normalized)) return normalized;
+  return origins[0] ?? "http://localhost:5173";
+};
+
+const calendarReturnUrl = (query: Record<string, string>, returnOrigin?: string) => {
+  const redirect = new URL(resolveWebOrigin(returnOrigin));
+  for (const [key, value] of Object.entries(query)) {
+    redirect.searchParams.set(key, value);
+  }
+  return redirect.toString();
+};
+
 const googleConfig = () => {
   const clientId = process.env.GOOGLE_CLIENT_ID ?? "";
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
   const redirectUri = process.env.GOOGLE_REDIRECT_URI ?? "http://localhost:3333/api/routine/google/callback";
-  const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+  const webOrigin = resolveWebOrigin();
   return { clientId, clientSecret, redirectUri, webOrigin, configured: Boolean(clientId && clientSecret) };
 };
 
@@ -53,7 +74,7 @@ const microsoftConfig = () => {
   const clientId = process.env.MICROSOFT_CLIENT_ID ?? "";
   const clientSecret = process.env.MICROSOFT_CLIENT_SECRET ?? "";
   const redirectUri = process.env.MICROSOFT_REDIRECT_URI ?? "http://localhost:3333/api/routine/microsoft/callback";
-  const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+  const webOrigin = resolveWebOrigin();
   return { clientId, clientSecret, redirectUri, webOrigin, configured: Boolean(clientId && clientSecret) };
 };
 
@@ -354,7 +375,7 @@ const ensureAccessToken = async (connection: RoutineCalendarConnection) => {
   return { connection: next, accessToken: next.accessToken ?? refreshed.access_token };
 };
 
-export const startGoogleConnect = async (planId: string) => {
+export const startGoogleConnect = async (planId: string, returnOrigin?: string) => {
   const config = googleConfig();
   if (!config.configured) {
     throw new RoutineError("Google Calendar nao esta configurado. Defina GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET.", 503);
@@ -364,6 +385,7 @@ export const startGoogleConnect = async (planId: string) => {
   const state = await saveOAuthState({
     id: randomUUID(),
     planId: planId.trim(),
+    returnOrigin: resolveWebOrigin(returnOrigin),
     createdAt: nowIso()
   });
   const url = new URL(googleAuthUrl);
@@ -422,21 +444,16 @@ export const finishGoogleConnect = async (repository: PlanRepository, code: stri
   ];
   await saveRoutineState(repository, state.planId, { ...plan.routine, calendarLinks: nextLinks });
 
-  const redirect = new URL(config.webOrigin);
-  redirect.searchParams.set("routine", "calendars");
-  redirect.searchParams.set("google", "connected");
-  return { redirect: redirect.toString(), connection: publicConnection(connection) };
+  return {
+    redirect: calendarReturnUrl({ routine: "calendars", google: "connected" }, state.returnOrigin),
+    connection: publicConnection(connection)
+  };
 };
 
-export const googleCallbackErrorRedirect = (message: string) => {
-  const redirect = new URL(googleConfig().webOrigin);
-  redirect.searchParams.set("routine", "calendars");
-  redirect.searchParams.set("google", "error");
-  redirect.searchParams.set("message", message);
-  return redirect.toString();
-};
+export const googleCallbackErrorRedirect = (message: string, returnOrigin?: string) =>
+  calendarReturnUrl({ routine: "calendars", google: "error", message }, returnOrigin);
 
-export const startMicrosoftConnect = async (planId: string) => {
+export const startMicrosoftConnect = async (planId: string, returnOrigin?: string) => {
   const config = microsoftConfig();
   if (!config.configured) {
     throw new RoutineError("Teams/Outlook nao esta configurado. Defina MICROSOFT_CLIENT_ID e MICROSOFT_CLIENT_SECRET.", 503);
@@ -446,6 +463,7 @@ export const startMicrosoftConnect = async (planId: string) => {
   const state = await saveOAuthState({
     id: randomUUID(),
     planId: planId.trim(),
+    returnOrigin: resolveWebOrigin(returnOrigin),
     createdAt: nowIso()
   });
   const url = new URL(microsoftAuthUrl);
@@ -505,19 +523,14 @@ export const finishMicrosoftConnect = async (repository: PlanRepository, code: s
   ];
   await saveRoutineState(repository, state.planId, { ...plan.routine, calendarLinks: nextLinks });
 
-  const redirect = new URL(config.webOrigin);
-  redirect.searchParams.set("routine", "calendars");
-  redirect.searchParams.set("microsoft", "connected");
-  return { redirect: redirect.toString(), connection: publicConnection(connection) };
+  return {
+    redirect: calendarReturnUrl({ routine: "calendars", microsoft: "connected" }, state.returnOrigin),
+    connection: publicConnection(connection)
+  };
 };
 
-export const microsoftCallbackErrorRedirect = (message: string) => {
-  const redirect = new URL(microsoftConfig().webOrigin);
-  redirect.searchParams.set("routine", "calendars");
-  redirect.searchParams.set("microsoft", "error");
-  redirect.searchParams.set("message", message);
-  return redirect.toString();
-};
+export const microsoftCallbackErrorRedirect = (message: string, returnOrigin?: string) =>
+  calendarReturnUrl({ routine: "calendars", microsoft: "error", message }, returnOrigin);
 
 export const listPublicConnections = async (planId: string) => (await listConnections(planId)).map(publicConnection);
 
