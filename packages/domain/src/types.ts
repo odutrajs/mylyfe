@@ -10,6 +10,20 @@ export type RoutineModuleScope = "home" | "agenda" | "tasks" | "contexts" | "cal
 export type HealthModuleScope = "home" | "wallet" | "appointments" | "meds";
 export type HomeModuleScope = "list" | "group";
 export type ShoppingItemStatus = "open" | "bought";
+export type ShoppingSector =
+  | "hortifruti"
+  | "padaria"
+  | "acougue"
+  | "frios"
+  | "congelados"
+  | "mercearia"
+  | "bebidas"
+  | "higiene"
+  | "limpeza"
+  | "pets"
+  | "bazar"
+  | "outros";
+export type ShoppingSectorMemory = Partial<Record<string, ShoppingSector>>;
 export type RoutineContextKind = "work" | "project" | "personal" | "other";
 export type RoutineLocalEventSource = "health" | "manual";
 export type HealthCareKind = "checkup" | "dentist" | "vaccine" | "ophthalmology" | "gynecology" | "urology" | "other";
@@ -343,6 +357,7 @@ export interface ShoppingItem {
   id: string;
   name: string;
   quantity?: number;
+  sector: ShoppingSector;
   addedByPersonId?: OwnerId;
   addedByPhone?: string;
   addedByName?: string;
@@ -360,6 +375,7 @@ export interface ShoppingList {
 
 export interface HomeModuleState {
   lists: ShoppingList[];
+  sectorMemory: ShoppingSectorMemory;
   updatedAt: string;
 }
 

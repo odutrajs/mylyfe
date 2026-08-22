@@ -7,4 +7,5 @@ export * from "./routine.js";
 export * from "./agenda-command.js";
 export * from "./secretary-intent.js";
 export * from "./health.js";
+export * from "./shopping-sector.js";
 export * from "./home.js";

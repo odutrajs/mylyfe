@@ -3982,7 +3982,21 @@ button.module-overview-card:hover {
 
 .shopping-list {
   display: grid;
-  gap: 10px;
+  gap: 18px;
+}
+
+.shopping-sector {
+  display: grid;
+  gap: 0;
+}
+
+.shopping-sector h3 {
+  margin: 0 0 4px;
+  color: #2b332c;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .shopping-item {

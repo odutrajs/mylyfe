@@ -5,6 +5,7 @@ import {
   DEFAULT_SHOPPING_LIST_ID,
   defaultShoppingListOf,
   formatShoppingItem,
+  groupShoppingItemsBySector,
   linkShoppingListGroup,
   normalizeHomeModuleState,
   removeShoppingItem,
@@ -75,6 +76,8 @@ export function HomeView({
 
   const openItems = useMemo(() => (list?.items ?? []).filter((item) => item.status === "open"), [list?.items]);
   const boughtItems = useMemo(() => (list?.items ?? []).filter((item) => item.status === "bought"), [list?.items]);
+  const openSectors = useMemo(() => groupShoppingItemsBySector(openItems), [openItems]);
+  const boughtSectors = useMemo(() => groupShoppingItemsBySector(boughtItems), [boughtItems]);
   const linked = Boolean(list?.whatsappGroupJid);
 
   const addFromDraft = (event?: FormEvent) => {
@@ -99,7 +102,7 @@ export function HomeView({
       <header className="page-header">
         <span>MyLyfe / Casa</span>
         <h1>Mercado</h1>
-        <p>Mande o item no grupo do WhatsApp ou escreva aqui. No mercado, marque no app ou responda “comprei maionese”.</p>
+        <p>Mande o item no grupo do WhatsApp ou escreva aqui. Cada item já entra no setor certo e a lista sai separada por corredor.</p>
       </header>
 
       <section className="metric-grid compact">
@@ -142,35 +145,40 @@ export function HomeView({
         {openItems.length === 0 && <p className="panel-note">Nada pendente. Mande “maionese” no grupo ou adicione aqui.</p>}
 
         <div className="shopping-list">
-          {openItems.map((item) => (
-            <article key={item.id} className="shopping-item">
-              <button
-                className="shopping-check"
-                type="button"
-                aria-label={`Marcar ${item.name}`}
-                onClick={() => apply(setShoppingItemStatus(plan, listId, item.id, "bought"))}
-              >
-                <Check size={16} />
-              </button>
-              <div>
-                <strong>{formatShoppingItem(item)}</strong>
-                {personLabel(item) ? <span>Pedido por {personLabel(item)}</span> : null}
-              </div>
-              <input
-                className="shopping-qty"
-                type="number"
-                min={1}
-                step={1}
-                value={item.quantity ?? 1}
-                onChange={(event) => {
-                  const quantity = Number(event.target.value);
-                  apply(updateShoppingItemQuantity(plan, listId, item.id, Number.isFinite(quantity) ? quantity : 1));
-                }}
-              />
-              <button className="icon-button" type="button" onClick={() => apply(removeShoppingItem(plan, listId, item.id))}>
-                <Trash2 size={16} />
-              </button>
-            </article>
+          {openSectors.map((group) => (
+            <section key={group.sector} className="shopping-sector">
+              <h3>{group.label}</h3>
+              {group.items.map((item) => (
+                <article key={item.id} className="shopping-item">
+                  <button
+                    className="shopping-check"
+                    type="button"
+                    aria-label={`Marcar ${item.name}`}
+                    onClick={() => apply(setShoppingItemStatus(plan, listId, item.id, "bought"))}
+                  >
+                    <Check size={16} />
+                  </button>
+                  <div>
+                    <strong>{formatShoppingItem(item)}</strong>
+                    {personLabel(item) ? <span>Pedido por {personLabel(item)}</span> : null}
+                  </div>
+                  <input
+                    className="shopping-qty"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={item.quantity ?? 1}
+                    onChange={(event) => {
+                      const quantity = Number(event.target.value);
+                      apply(updateShoppingItemQuantity(plan, listId, item.id, Number.isFinite(quantity) ? quantity : 1));
+                    }}
+                  />
+                  <button className="icon-button" type="button" onClick={() => apply(removeShoppingItem(plan, listId, item.id))}>
+                    <Trash2 size={16} />
+                  </button>
+                </article>
+              ))}
+            </section>
           ))}
         </div>
       </section>
@@ -187,24 +195,29 @@ export function HomeView({
             </button>
           </header>
           <div className="shopping-list">
-            {boughtItems.map((item) => (
-              <article key={item.id} className="shopping-item bought">
-                <button
-                  className="shopping-check done"
-                  type="button"
-                  aria-label={`Reabrir ${item.name}`}
-                  onClick={() => apply(setShoppingItemStatus(plan, listId, item.id, "open"))}
-                >
-                  <Check size={16} />
-                </button>
-                <div>
-                  <strong>{formatShoppingItem(item)}</strong>
-                  {personLabel(item) ? <span>Pedido por {personLabel(item)}</span> : null}
-                </div>
-                <button className="icon-button" type="button" onClick={() => apply(removeShoppingItem(plan, listId, item.id))}>
-                  <Trash2 size={16} />
-                </button>
-              </article>
+            {boughtSectors.map((group) => (
+              <section key={group.sector} className="shopping-sector">
+                <h3>{group.label}</h3>
+                {group.items.map((item) => (
+                  <article key={item.id} className="shopping-item bought">
+                    <button
+                      className="shopping-check done"
+                      type="button"
+                      aria-label={`Reabrir ${item.name}`}
+                      onClick={() => apply(setShoppingItemStatus(plan, listId, item.id, "open"))}
+                    >
+                      <Check size={16} />
+                    </button>
+                    <div>
+                      <strong>{formatShoppingItem(item)}</strong>
+                      {personLabel(item) ? <span>Pedido por {personLabel(item)}</span> : null}
+                    </div>
+                    <button className="icon-button" type="button" onClick={() => apply(removeShoppingItem(plan, listId, item.id))}>
+                      <Trash2 size={16} />
+                    </button>
+                  </article>
+                ))}
+              </section>
             ))}
           </div>
         </section>

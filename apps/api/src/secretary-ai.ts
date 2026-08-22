@@ -1,4 +1,4 @@
-import type { SecretaryIntent } from "@mylyfe/domain";
+import { isShoppingSector, shoppingSectors, type SecretaryIntent, type ShoppingSector } from "@mylyfe/domain";
 
 const systemPrompt = `Voce e a secretaria do MyLyfe. Leia a mensagem do usuario em portugues e devolva SOMENTE um JSON:
 {"intents":[ ... ]}
@@ -91,6 +91,64 @@ export const interpretSecretaryMessageWithAi = async (
     const list = Array.isArray(parsed.intents) ? parsed.intents : isIntent(parsed) ? [parsed] : [];
     const intents = list.filter(isIntent);
     return intents.length ? intents : null;
+  } catch {
+    return null;
+  }
+};
+
+const sectorPrompt = `Voce classifica itens de supermercado brasileiro no setor correto da loja.
+Devolva SOMENTE um JSON: {"sector":"mercearia"}
+
+Setores validos: ${shoppingSectors.join(", ")}
+
+Guia:
+- hortifruti: frutas, verduras, legumes, ovos, ervas
+- padaria: pao, bolo, torrada da padaria
+- acougue: carnes, aves, peixes frescos, linguica
+- frios: leite, iogurte, queijo, manteiga, presunto, pudim refrigerado
+- congelados: sorvete, pronto congelado, frutas congeladas
+- mercearia: arroz, feijao, oleo, vinagre, molho, enlatado, cafe em po, coco ralado, champignon
+- bebidas: agua, suco, refri, cerveja, cafe gelado pronto
+- higiene: shampoo, sabonete, pasta de dente, desodorante, papel higienico
+- limpeza: detergente, desinfetante, saco de lixo, cheirinho de banheiro
+- pets: racao, areia, petisco
+- bazar: faixa, pilha, lampada, utilidades
+- outros: so se realmente nao couber
+
+Nao invente outro setor.`;
+
+export const classifyShoppingSectorWithAi = async (name: string): Promise<ShoppingSector | null> => {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const item = name.trim();
+  if (!apiKey || !item) return null;
+
+  const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: sectorPrompt },
+        { role: "user", content: `Item: ${item}` }
+      ]
+    })
+  });
+
+  if (!response.ok) return null;
+  const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const raw = payload.choices?.[0]?.message?.content;
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as { sector?: unknown };
+    return isShoppingSector(parsed.sector) && parsed.sector !== "outros" ? parsed.sector : null;
   } catch {
     return null;
   }

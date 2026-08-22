@@ -9,6 +9,7 @@ import {
   normalizeSecretaryModuleState,
   normalizeWhatsappGroupJid,
   phonesMatch,
+  setShoppingItemSector,
   tickAlert,
   type LifeAlert,
   type SecretaryJob,
@@ -16,7 +17,7 @@ import {
   type SecretarySettings
 } from "@mylyfe/domain";
 import type { PlanRepository } from "./repository.js";
-import { interpretSecretaryMessageWithAi } from "./secretary-ai.js";
+import { classifyShoppingSectorWithAi, interpretSecretaryMessageWithAi } from "./secretary-ai.js";
 import { enqueueJobs, getOutbox, readLegacySecretaryState, saveOutbox } from "./secretary-store.js";
 import { confirmPhoneVerification, findPlanPersonByPhone } from "./phone-verify-service.js";
 
@@ -335,7 +336,18 @@ export const handleShoppingGroupInbox = async (
         return { planId, reply: "", jobs: [] as SecretaryJob[], ignored: true };
       }
 
-      await repository.save(inbox.plan);
+      let plan = inbox.plan;
+      if (inbox.addedItemId) {
+        const added = normalizeHomeModuleState(plan.home)
+          .lists.find((entry) => entry.id === list.id)
+          ?.items.find((item) => item.id === inbox.addedItemId);
+        if (added?.sector === "outros") {
+          const sector = await classifyShoppingSectorWithAi(added.name);
+          if (sector) plan = setShoppingItemSector(plan, list.id, added.id, sector, now);
+        }
+      }
+
+      await repository.save(plan);
       const reply = heardReply(text.trim(), inbox.reply, via);
       const jobs = toJobs(planId, jid, [{ text: reply, kind: "ack" }], true);
       await enqueueJobs(jobs);

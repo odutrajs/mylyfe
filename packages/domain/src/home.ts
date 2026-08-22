@@ -1,4 +1,21 @@
-import type { FinancePlan, HomeModuleState, OwnerId, ShoppingItem, ShoppingItemStatus, ShoppingList } from "./types.js";
+import {
+  classifyShoppingSector,
+  foldShoppingName,
+  groupShoppingItemsBySector,
+  isShoppingSector,
+  normalizeShoppingSectorMemory,
+  rememberShoppingSector
+} from "./shopping-sector.js";
+import type {
+  FinancePlan,
+  HomeModuleState,
+  OwnerId,
+  ShoppingItem,
+  ShoppingItemStatus,
+  ShoppingList,
+  ShoppingSector,
+  ShoppingSectorMemory
+} from "./types.js";
 
 const defaultUpdatedAt = "1970-01-01T00:00:00.000Z";
 
@@ -123,17 +140,28 @@ export const normalizeWhatsappGroupJid = (value?: string | null) => {
 
 const isItemStatus = (value: unknown): value is ShoppingItemStatus => value === "open" || value === "bought";
 
-const normalizeItem = (item: Partial<ShoppingItem>, index: number): ShoppingItem => ({
-  id: asString(item.id) || `item-${index + 1}`,
-  name: titleCase(asString(item.name)) || asString(item.name).trim(),
-  quantity: Number(item.quantity) > 0 ? Number(item.quantity) : undefined,
-  addedByPersonId: asString(item.addedByPersonId) || undefined,
-  addedByPhone: asString(item.addedByPhone) || undefined,
-  addedByName: asString(item.addedByName).trim() || undefined,
-  status: isItemStatus(item.status) ? item.status : "open",
-  createdAt: asString(item.createdAt) || defaultUpdatedAt,
-  boughtAt: asString(item.boughtAt) || undefined
-});
+const normalizeItem = (
+  item: Partial<ShoppingItem>,
+  index: number,
+  memory?: ShoppingSectorMemory,
+  siblings?: Array<Partial<ShoppingItem>>
+): ShoppingItem => {
+  const name = titleCase(asString(item.name)) || asString(item.name).trim();
+  return {
+    id: asString(item.id) || `item-${index + 1}`,
+    name,
+    quantity: Number(item.quantity) > 0 ? Number(item.quantity) : undefined,
+    sector: isShoppingSector(item.sector)
+      ? item.sector
+      : classifyShoppingSector(name, { memory, items: siblings as ShoppingItem[] }),
+    addedByPersonId: asString(item.addedByPersonId) || undefined,
+    addedByPhone: asString(item.addedByPhone) || undefined,
+    addedByName: asString(item.addedByName).trim() || undefined,
+    status: isItemStatus(item.status) ? item.status : "open",
+    createdAt: asString(item.createdAt) || defaultUpdatedAt,
+    boughtAt: asString(item.boughtAt) || undefined
+  };
+};
 
 const defaultShoppingList = (): ShoppingList => ({
   id: DEFAULT_SHOPPING_LIST_ID,
@@ -141,20 +169,34 @@ const defaultShoppingList = (): ShoppingList => ({
   items: []
 });
 
-const normalizeList = (list: Partial<ShoppingList>, index: number): ShoppingList => ({
+const normalizeList = (list: Partial<ShoppingList>, index: number, memory?: ShoppingSectorMemory): ShoppingList => ({
   id: asString(list.id) || (index === 0 ? DEFAULT_SHOPPING_LIST_ID : `list-${index + 1}`),
   name: asString(list.name).trim() || "Mercado",
   whatsappGroupJid: normalizeWhatsappGroupJid(list.whatsappGroupJid) || undefined,
-  items: (list.items ?? []).map(normalizeItem).filter((item) => item.name)
+  items: (list.items ?? [])
+    .map((item, itemIndex, siblings) => normalizeItem(item, itemIndex, memory, siblings))
+    .filter((item) => item.name)
 });
+
+const collectSectorMemory = (lists: ShoppingList[], memory: ShoppingSectorMemory): ShoppingSectorMemory => {
+  let next = memory;
+  for (const list of lists) {
+    for (const item of list.items) {
+      next = rememberShoppingSector(next, item.name, item.sector);
+    }
+  }
+  return next;
+};
 
 export const defaultHomeModuleState = (): HomeModuleState => ({
   lists: [defaultShoppingList()],
+  sectorMemory: {},
   updatedAt: defaultUpdatedAt
 });
 
 export const normalizeHomeModuleState = (state?: Partial<HomeModuleState> | null): HomeModuleState => {
-  const lists = (state?.lists ?? []).map(normalizeList).filter((list) => list.id);
+  const sectorMemory = normalizeShoppingSectorMemory(state?.sectorMemory);
+  const lists = (state?.lists ?? []).map((list, index) => normalizeList(list, index, sectorMemory)).filter((list) => list.id);
   if (!lists.length) {
     return defaultHomeModuleState();
   }
@@ -163,6 +205,7 @@ export const normalizeHomeModuleState = (state?: Partial<HomeModuleState> | null
   }
   return {
     lists,
+    sectorMemory: collectSectorMemory(lists, sectorMemory),
     updatedAt: asString(state?.updatedAt) || defaultUpdatedAt
   };
 };
@@ -193,7 +236,7 @@ export const findShoppingListByGroupJid = (state: HomeModuleState | undefined, g
   return normalizeHomeModuleState(state).lists.find((list) => list.whatsappGroupJid === jid);
 };
 
-const itemKey = (name: string) => fold(name);
+const itemKey = (name: string) => foldShoppingName(name);
 
 const findOpenItem = (list: ShoppingList, name: string) =>
   list.items.find((item) => item.status === "open" && itemKey(item.name) === itemKey(name));
@@ -207,22 +250,27 @@ const findItemByName = (list: ShoppingList, name: string) => {
 export const formatShoppingItem = (item: Pick<ShoppingItem, "name" | "quantity">) =>
   item.quantity && item.quantity !== 1 ? `${item.quantity} ${item.name}` : item.name;
 
-const formatListReply = (list: ShoppingList) => {
+export const formatShoppingListReply = (list: ShoppingList) => {
   const open = list.items.filter((item) => item.status === "open");
   if (!open.length) return "A lista esta vazia.";
-  return `Lista do mercado:\n${open.map((item) => `- ${formatShoppingItem(item)}`).join("\n")}`;
+  const groups = groupShoppingItemsBySector(open);
+  const body = groups
+    .map((group) => `${group.label}\n${group.items.map((item) => `- ${formatShoppingItem(item)}`).join("\n")}`)
+    .join("\n\n");
+  return `Lista do mercado:\n\n${body}`;
 };
 
 export const applyShoppingCommand = (
   list: ShoppingList,
   command: ParsedShoppingCommand,
   actor: ShoppingActor = {},
-  now = new Date()
+  now = new Date(),
+  memory?: ShoppingSectorMemory
 ): ShoppingCommandResult => {
   if (command.kind === "ignore") return { list, reply: "", ignored: true };
 
   if (command.kind === "list") {
-    return { list, reply: formatListReply(list), ignored: false };
+    return { list, reply: formatShoppingListReply(list), ignored: false };
   }
 
   if (!command.name) return { list, reply: "", ignored: true };
@@ -248,6 +296,7 @@ export const applyShoppingCommand = (
       id: createShoppingId("item", now),
       name: command.name,
       quantity: command.quantity,
+      sector: classifyShoppingSector(command.name, { memory, items: list.items }),
       addedByPersonId: actor.personId,
       addedByPhone: actor.phone,
       addedByName: actor.name?.trim() || undefined,
@@ -289,17 +338,33 @@ export const applyShoppingCommand = (
   };
 };
 
-const withList = (plan: FinancePlan, listId: string, now: Date, mutate: (list: ShoppingList) => ShoppingList): FinancePlan => {
+const withHome = (
+  plan: FinancePlan,
+  now: Date,
+  mutate: (home: HomeModuleState) => HomeModuleState
+): FinancePlan => {
   const home = normalizeHomeModuleState(plan.home);
   return {
     ...plan,
     home: {
-      ...home,
-      lists: home.lists.map((list) => (list.id === listId ? mutate(list) : list)),
+      ...mutate(home),
       updatedAt: now.toISOString()
     }
   };
 };
+
+const withList = (
+  plan: FinancePlan,
+  listId: string,
+  now: Date,
+  mutate: (list: ShoppingList) => ShoppingList,
+  memory?: ShoppingSectorMemory
+): FinancePlan =>
+  withHome(plan, now, (home) => ({
+    ...home,
+    lists: home.lists.map((list) => (list.id === listId ? mutate(list) : list)),
+    sectorMemory: memory ?? home.sectorMemory
+  }));
 
 export const applyShoppingInboxToPlan = (
   plan: FinancePlan,
@@ -310,16 +375,24 @@ export const applyShoppingInboxToPlan = (
 ) => {
   const home = normalizeHomeModuleState(plan.home);
   const list = home.lists.find((item) => item.id === listId);
-  if (!list) return { plan, reply: "", ignored: true as const, listId };
+  if (!list) return { plan, reply: "", ignored: true as const, listId, addedItemId: undefined as string | undefined };
 
-  const result = applyShoppingCommand(list, parseShoppingCommand(text), actor, now);
-  if (result.ignored) return { plan, reply: "", ignored: true as const, listId };
+  const command = parseShoppingCommand(text);
+  const result = applyShoppingCommand(list, command, actor, now, home.sectorMemory);
+  if (result.ignored) return { plan, reply: "", ignored: true as const, listId, addedItemId: undefined as string | undefined };
+
+  const added =
+    command.kind === "add"
+      ? result.list.items.find((item) => !list.items.some((current) => current.id === item.id))
+      : undefined;
+  const sectorMemory = added ? rememberShoppingSector(home.sectorMemory, added.name, added.sector) : home.sectorMemory;
 
   return {
-    plan: withList(plan, listId, now, () => result.list),
+    plan: withList(plan, listId, now, () => result.list, sectorMemory),
     reply: result.reply,
     ignored: false as const,
-    listId
+    listId,
+    addedItemId: added?.id
   };
 };
 
@@ -356,6 +429,27 @@ export const updateShoppingItemQuantity = (
       item.id === itemId ? { ...item, quantity: quantity && quantity > 0 ? quantity : undefined } : item
     )
   }));
+
+export const setShoppingItemSector = (
+  plan: FinancePlan,
+  listId: string,
+  itemId: string,
+  sector: ShoppingSector,
+  now = new Date()
+) => {
+  const home = normalizeHomeModuleState(plan.home);
+  const item = home.lists.find((list) => list.id === listId)?.items.find((entry) => entry.id === itemId);
+  return withList(
+    plan,
+    listId,
+    now,
+    (list) => ({
+      ...list,
+      items: list.items.map((entry) => (entry.id === itemId ? { ...entry, sector } : entry))
+    }),
+    item ? rememberShoppingSector(home.sectorMemory, item.name, sector) : home.sectorMemory
+  );
+};
 
 export const removeShoppingItem = (plan: FinancePlan, listId: string, itemId: string, now = new Date()) =>
   withList(plan, listId, now, (list) => ({

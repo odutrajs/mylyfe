@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   applyShoppingCommand,
   applyShoppingInboxToPlan,
+  classifyShoppingSector,
   createEmptyPlan,
   findShoppingListByGroupJid,
   formatShoppingItem,
+  formatShoppingListReply,
   linkShoppingListGroup,
+  normalizeHomeModuleState,
   normalizeWhatsappGroupJid,
   parseShoppingCommand,
+  setShoppingItemSector,
   setShoppingItemStatus
 } from "../src/index.js";
 
@@ -66,6 +70,79 @@ describe("shopping list mutations", () => {
     expect(formatShoppingItem({ name: "Leite", quantity: 2 })).toBe("2 Leite");
     expect(formatShoppingItem({ name: "Maionese" })).toBe("Maionese");
   });
+
+  it("stores the aisle when adding and lists items by sector", () => {
+    const names = [
+      "Vinagre",
+      "Frutas Congeladas",
+      "Agua Com Gas",
+      "Shampoo Anti Caspa",
+      "Cheirinho De Banheiro (pastilha)",
+      "Iogurte Zero",
+      "Pudim Batavo",
+      "Cafe Gelado Pingado",
+      "Suco Dell Vale",
+      "Faixa",
+      "Champignon",
+      "Coco Ralado",
+      "Cheiro Verde"
+    ];
+    const list = names.reduce(
+      (current, name) => applyShoppingCommand(current, { kind: "add", name }).list,
+      emptyList
+    );
+
+    expect(list.items.map((item) => [item.name, item.sector])).toEqual([
+      ["Vinagre", "mercearia"],
+      ["Frutas Congeladas", "congelados"],
+      ["Agua Com Gas", "bebidas"],
+      ["Shampoo Anti Caspa", "higiene"],
+      ["Cheirinho De Banheiro (pastilha)", "limpeza"],
+      ["Iogurte Zero", "frios"],
+      ["Pudim Batavo", "frios"],
+      ["Cafe Gelado Pingado", "bebidas"],
+      ["Suco Dell Vale", "bebidas"],
+      ["Faixa", "bazar"],
+      ["Champignon", "mercearia"],
+      ["Coco Ralado", "mercearia"],
+      ["Cheiro Verde", "hortifruti"]
+    ]);
+
+    expect(applyShoppingCommand(list, { kind: "list" }).reply).toBe(
+      [
+        "Lista do mercado:",
+        "",
+        "Hortifruti",
+        "- Cheiro Verde",
+        "",
+        "Frios e Laticinios",
+        "- Iogurte Zero",
+        "- Pudim Batavo",
+        "",
+        "Congelados",
+        "- Frutas Congeladas",
+        "",
+        "Mercearia",
+        "- Vinagre",
+        "- Champignon",
+        "- Coco Ralado",
+        "",
+        "Bebidas",
+        "- Agua Com Gas",
+        "- Cafe Gelado Pingado",
+        "- Suco Dell Vale",
+        "",
+        "Higiene",
+        "- Shampoo Anti Caspa",
+        "",
+        "Limpeza",
+        "- Cheirinho De Banheiro (pastilha)",
+        "",
+        "Bazar",
+        "- Faixa"
+      ].join("\n")
+    );
+  });
 });
 
 describe("home module on the plan", () => {
@@ -96,5 +173,32 @@ describe("home module on the plan", () => {
   it("normalizes a pasted group id", () => {
     expect(normalizeWhatsappGroupJid("120363998877")).toBe("120363998877@g.us");
     expect(normalizeWhatsappGroupJid("120363998877@g.us")).toBe("120363998877@g.us");
+  });
+
+  it("backfills sectors and remembers a corrected aisle", () => {
+    const home = normalizeHomeModuleState({
+      lists: [{ id: "mercado", name: "Mercado", items: [{ id: "1", name: "Vinagre", status: "open", createdAt: "2026-08-22T00:00:00.000Z" }] }],
+      updatedAt: "2026-08-22T00:00:00.000Z"
+    });
+    expect(home.lists[0]?.items[0]?.sector).toBe("mercearia");
+    expect(home.sectorMemory.vinagre).toBe("mercearia");
+
+    const plan = createEmptyPlan("test");
+    const added = applyShoppingInboxToPlan(plan, "mercado", "faixa");
+    const itemId = added.plan.home.lists[0]?.items[0]?.id ?? "";
+    const corrected = setShoppingItemSector(added.plan, "mercado", itemId, "higiene");
+    expect(corrected.home.lists[0]?.items[0]?.sector).toBe("higiene");
+    expect(corrected.home.sectorMemory.faixa).toBe("higiene");
+  });
+});
+
+describe("shopping sector classifier", () => {
+  it("prefers the more specific aisle", () => {
+    expect(classifyShoppingSector("Frutas Congeladas")).toBe("congelados");
+    expect(classifyShoppingSector("Cafe Gelado Pingado")).toBe("bebidas");
+    expect(classifyShoppingSector("Cafe")).toBe("mercearia");
+    expect(classifyShoppingSector("Champignon")).toBe("mercearia");
+    expect(classifyShoppingSector("Maionese")).toBe("mercearia");
+    expect(formatShoppingListReply({ id: "mercado", name: "Mercado", items: [] })).toBe("A lista esta vazia.");
   });
 });

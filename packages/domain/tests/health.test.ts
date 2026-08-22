@@ -99,12 +99,16 @@ describe("health appointments land on the routine agenda", () => {
   it("marks the appointment done when the secretary gets a yes after the visit", () => {
     const askedAt = new Date("2026-08-21T18:00:00.000Z");
     const { start, end } = buildAppointmentDateTime("2026-08-21", "14:00", zone);
-    const booked = upsertHealthAppointment(createEmptyPlan("test"), {
-      id: "appt-1",
-      title: "Dentista",
-      start,
-      end
-    });
+    const booked = upsertHealthAppointment(
+      createEmptyPlan("test"),
+      {
+        id: "appt-1",
+        title: "Dentista",
+        start,
+        end
+      },
+      new Date("2026-08-20T13:00:00.000Z")
+    );
     const waiting = {
       ...booked,
       secretary: {
