@@ -33,6 +33,7 @@ import {
   LineChart,
   Loader2,
   LogIn,
+  LogOut,
   MessageCircle,
   Palette,
   Percent,
@@ -50,6 +51,7 @@ import {
   Tag,
   Target,
   Trash2,
+  User,
   Users,
   UtensilsCrossed,
   WalletCards
@@ -77,9 +79,20 @@ import {
   isBudgetableCategory,
   resolveCategoryShare,
   selectDashboardCategoryBudgets,
+  accountLinkSharesHome,
+  applySharedHomeToAccountLink,
+  canAccessSharedHome,
   createEmptyPlan,
+  findAcceptedAccountLinkForEmail,
+  findPersonByEmail,
+  isLinkedInvitee,
+  overlayPersonalLifeModules,
+  personalLifeModulesFromComposed,
+  sessionDisplayName,
+  sharedPlanFromComposed,
   defaultExpenseCategories,
   defaultFinanceModuleAccess,
+  defaultHomeModuleAccess,
   defaultIndependenceAssumptions,
   defaultLifeWorkspace,
   isUnifiedShoppingCategory,
@@ -118,6 +131,7 @@ import {
   type Person,
   type RecurringTransaction,
   type RiskProfileName,
+  type ShoppingActor,
   type StatementRelativeMonth,
   type TransactionAudience,
   type TransactionNature,
@@ -152,7 +166,7 @@ type SecretaryModuleView = "secretary-home" | "secretary-alerts" | "secretary-wh
 type RoutineModuleView = "routine-home" | "routine-agenda" | "routine-tasks" | "routine-contexts" | "routine-calendars";
 type HealthModuleView = "health-home" | "health-wallet" | "health-appointments" | "health-meds";
 type HomeModuleView = "home-list";
-type View = FinanceView | SecretaryModuleView | RoutineModuleView | HealthModuleView | HomeModuleView;
+type View = FinanceView | SecretaryModuleView | RoutineModuleView | HealthModuleView | HomeModuleView | "profile";
 type SelectOption = { value: string; label: string; color?: string };
 type TransactionAnalyticsItem = {
   id: string;
@@ -541,6 +555,7 @@ function normalizeAccountLinkPermissions(permissions?: Partial<AccountLink["perm
 function normalizeAccountLink(link: AccountLink): AccountLink {
   return {
     ...link,
+    sharedHome: link.sharedHome !== false,
     permissions: normalizeAccountLinkPermissions(link.permissions)
   };
 }
@@ -659,22 +674,29 @@ function findSharedPlanIdForEmail(email: string) {
 }
 
 function findSessionPerson(plan: FinancePlan, session: UserSession) {
-  const email = normalizeEmail(session.email);
-  return plan.profile.people.find((person) => normalizeEmail(person.email ?? "") === email);
+  return findPersonByEmail(plan, session.email);
 }
 
 function isLinkedPartner(plan: FinancePlan, session: UserSession) {
-  const person = findSessionPerson(plan, session);
-  if (!person || person.role === "primary") return false;
-  return (
-    person.accountStatus === "linked" ||
-    (plan.profile.accountLinks ?? []).some((link) => link.status === "accepted" && link.inviteePersonId === person.id)
-  );
+  return isLinkedInvitee(plan, session.email);
 }
 
 function partnerNeedsOnboarding(plan: FinancePlan, session: UserSession) {
   const person = findSessionPerson(plan, session);
   return Boolean(person && isLinkedPartner(plan, session) && !person.onboardingCompleted);
+}
+
+function ensureInviteePerson(plan: FinancePlan, session: UserSession | null) {
+  if (!session) return plan;
+  const link = findAcceptedAccountLinkForEmail(plan, session.email);
+  if (!link || findSessionPerson(plan, session)) return plan;
+  return applyAcceptedInvite(plan, link, session).plan;
+}
+
+function usesSplitLinkedWorkspace(plan: FinancePlan, session: UserSession | null) {
+  return Boolean(
+    session?.personalPlanId && session.personalPlanId !== plan.id && isLinkedInvitee(plan, session.email)
+  );
 }
 
 function inviteEmailMismatch(invite: AccountLink, session: UserSession) {
@@ -1082,6 +1104,7 @@ function readInitialView(): View {
   if (health === "meds") return "health-meds";
   const home = new URLSearchParams(window.location.search).get("home");
   if (home === "list" || home === "mercado") return "home-list";
+  if (new URLSearchParams(window.location.search).get("profile")) return "profile";
   return "dashboard";
 }
 
@@ -1098,6 +1121,8 @@ export default function App() {
   const autoLinkedInviteRef = useRef("");
   const allowSaveRef = useRef(false);
   const planRef = useRef(plan);
+  const sharedPlanSnapshotRef = useRef<FinancePlan | null>(null);
+  const personalPlanSnapshotRef = useRef<FinancePlan | null>(null);
   sessionRef.current = session;
   planRef.current = plan;
   const activePlanId = invitePlanId || session?.planId || (inviteToken ? "primary" : "");
@@ -1179,8 +1204,26 @@ export default function App() {
           remote = storedLegacyPlan;
         }
 
+        const currentSession = sessionRef.current;
+        remote = ensureInviteePerson(remote, currentSession);
+        sharedPlanSnapshotRef.current = remote;
+        personalPlanSnapshotRef.current = null;
+
+        if (
+          currentSession?.personalPlanId &&
+          currentSession.personalPlanId !== activePlanId &&
+          isLinkedInvitee(remote, currentSession.email)
+        ) {
+          const personalResponse = await apiRequest(`/plans/${currentSession.personalPlanId}`);
+          if (personalResponse.ok) {
+            const personal = normalizePlanForClient((await personalResponse.json()) as FinancePlan);
+            personalPlanSnapshotRef.current = personal;
+            remote = overlayPersonalLifeModules(remote, personal, currentSession.email);
+          }
+        }
+
         if (active) {
-          setPlan(withSessionProfile(remote, sessionRef.current));
+          setPlan(withSessionProfile(remote, currentSession));
           setSaveState("saved");
         }
       } catch {
@@ -1202,7 +1245,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [activePlanId]);
+  }, [activePlanId, session?.email, session?.personalPlanId]);
 
   useEffect(() => {
     if (!loaded || !plan || !activePlanId) return;
@@ -1220,15 +1263,50 @@ export default function App() {
     const timer = window.setTimeout(async () => {
       const normalizedPlan = normalizePlanForClient(plan);
       localStorage.setItem(planStorageKey(activePlanId), JSON.stringify(normalizedPlan));
+      const currentSession = sessionRef.current;
 
       try {
-        const response = await apiRequest(`/plans/${activePlanId}`, {
-          method: "PUT",
-          body: JSON.stringify(normalizedPlan),
-          signal: controller.signal
-        });
+        if (
+          currentSession &&
+          usesSplitLinkedWorkspace(sharedPlanSnapshotRef.current ?? normalizedPlan, currentSession) &&
+          sharedPlanSnapshotRef.current &&
+          personalPlanSnapshotRef.current
+        ) {
+          const sharedToSave = sharedPlanFromComposed(
+            normalizedPlan,
+            sharedPlanSnapshotRef.current,
+            currentSession.email
+          );
+          const personalToSave = personalLifeModulesFromComposed(
+            normalizedPlan,
+            personalPlanSnapshotRef.current,
+            currentSession.email
+          );
+          const [sharedResponse, personalResponse] = await Promise.all([
+            apiRequest(`/plans/${activePlanId}`, {
+              method: "PUT",
+              body: JSON.stringify(sharedToSave),
+              signal: controller.signal
+            }),
+            apiRequest(`/plans/${currentSession.personalPlanId}`, {
+              method: "PUT",
+              body: JSON.stringify(personalToSave),
+              signal: controller.signal
+            })
+          ]);
+          if (!sharedResponse.ok || !personalResponse.ok) throw new Error("Falha ao salvar");
+          sharedPlanSnapshotRef.current = sharedToSave;
+          personalPlanSnapshotRef.current = personalToSave;
+        } else {
+          const response = await apiRequest(`/plans/${activePlanId}`, {
+            method: "PUT",
+            body: JSON.stringify(normalizedPlan),
+            signal: controller.signal
+          });
+          if (!response.ok) throw new Error("Falha ao salvar");
+          sharedPlanSnapshotRef.current = normalizedPlan;
+        }
 
-        if (!response.ok) throw new Error("Falha ao salvar");
         setSaveState("saved");
       } catch {
         if (!controller.signal.aborted) setSaveState("offline");
@@ -1249,6 +1327,35 @@ export default function App() {
       if (!current) return;
       const normalizedPlan = normalizePlanForClient(current);
       localStorage.setItem(planStorageKey(activePlanId), JSON.stringify(normalizedPlan));
+      const currentSession = sessionRef.current;
+      if (
+        currentSession &&
+        usesSplitLinkedWorkspace(sharedPlanSnapshotRef.current ?? normalizedPlan, currentSession) &&
+        sharedPlanSnapshotRef.current &&
+        personalPlanSnapshotRef.current
+      ) {
+        const sharedToSave = sharedPlanFromComposed(
+          normalizedPlan,
+          sharedPlanSnapshotRef.current,
+          currentSession.email
+        );
+        const personalToSave = personalLifeModulesFromComposed(
+          normalizedPlan,
+          personalPlanSnapshotRef.current,
+          currentSession.email
+        );
+        void apiRequest(`/plans/${activePlanId}`, {
+          method: "PUT",
+          body: JSON.stringify(sharedToSave),
+          keepalive: true
+        }).catch(() => undefined);
+        void apiRequest(`/plans/${currentSession.personalPlanId}`, {
+          method: "PUT",
+          body: JSON.stringify(personalToSave),
+          keepalive: true
+        }).catch(() => undefined);
+        return;
+      }
       void apiRequest(`/plans/${activePlanId}`, {
         method: "PUT",
         body: JSON.stringify(normalizedPlan),
@@ -1292,7 +1399,12 @@ export default function App() {
     autoLinkedInviteRef.current = linkKey;
     const accepted = applyAcceptedInvite(plan, pendingInvite, session);
     rememberPlanMembership(session.email, accepted.session.planId, accepted.session.personalPlanId ?? accepted.session.userId);
+    sharedPlanSnapshotRef.current = accepted.plan;
     void persistServerSession(accepted.session);
+    void apiRequest(`/plans/${accepted.plan.id}`, {
+      method: "PUT",
+      body: JSON.stringify(normalizePlanForClient(accepted.plan))
+    }).catch(() => undefined);
     setPlan(accepted.plan);
     setSession(accepted.session);
     clearPendingInviteContext();
@@ -1315,6 +1427,17 @@ export default function App() {
     setInviteToken("");
     setInvitePlanId(plan.id);
   }, [inviteByToken, plan, session]);
+
+  useEffect(() => {
+    if (!plan || !session || !isLinkedPartner(plan, session)) return;
+    const person = findSessionPerson(plan, session);
+    const nextName = person?.name?.trim();
+    if (!nextName || nextName === session.name) return;
+    const namedSession = { ...session, name: nextName };
+    persistSession(namedSession);
+    void persistServerSession(namedSession);
+    setSession(namedSession);
+  }, [plan, session]);
 
   if (!authReady) return <LoadingScreen />;
 
@@ -1351,7 +1474,7 @@ export default function App() {
     return <InviteBlocked invite={pendingInvite} session={session} onSignOut={signOut} />;
   }
 
-  if (inviteToken && pendingInvite) {
+  if (inviteToken && pendingInvite && !findSessionPerson(plan, session)) {
     return <LoadingScreen />;
   }
 
@@ -1402,6 +1525,7 @@ export default function App() {
       view={view}
       setView={setView}
       session={session}
+      setSession={setSession}
       onSignOut={signOut}
     />
   );
@@ -1546,8 +1670,8 @@ function AuthScreen({
             <p>
               {inviteMode
                 ? isNewAccount
-                  ? "Cadastre-se com o e-mail do convite. Ao continuar, sua conta e vinculada automaticamente e voce preenche os seus dados financeiros."
-                  : "Entre com sua senha. Sua conta sera vinculada automaticamente a este Financeiro compartilhado."
+                  ? "Cadastre-se com o e-mail do convite. Ao continuar, sua conta e vinculada automaticamente. Se o mercado foi compartilhado, a lista da Casa tambem aparece pra voce."
+                  : "Entre com sua senha. Sua conta sera vinculada automaticamente a esta conta compartilhada."
                 : mode === "login"
                   ? "A conta fica no servidor. Entre com e-mail e senha de qualquer navegador."
                   : "Crie a conta no servidor. Se este e-mail ja tinha dados, eles continuam no mesmo plano."}
@@ -1878,20 +2002,21 @@ function PartnerOnboarding({
           </button>
         </div>
         <p className="partner-onboarding-note">
-          Conta {session.email} vinculada ao Financeiro de {host?.name || "outra pessoa"}. Preencha somente o que e seu.
+          Conta {session.email} vinculada a {host?.name || "outra pessoa"}. Preencha somente o que e seu
+          {canAccessSharedHome(plan, session.email) ? ", inclusive a lista de mercado compartilhada" : ""}.
         </p>
         {step === 0 && (
           <EditorSection title="Seu perfil" icon={<BadgeDollarSign size={18} />}>
             <div className="form-grid">
               <TextField label="Seu nome" value={currentPerson.name} onChange={(name) => updatePerson({ name })} />
+              <NumberField label="Sua idade" value={currentPerson.age ?? 0} onChange={(age) => updatePerson({ age })} />
+              <DateField label="Data de nascimento" value={currentPerson.birthDate} onChange={(birthDate) => updatePerson({ birthDate })} />
               <WhatsAppPhoneField
                 personId={currentPerson.id}
                 phone={currentPerson.phone ?? ""}
                 verifiedAt={currentPerson.whatsappVerifiedAt}
                 onPhoneChange={(phone, verifiedAt) => updatePerson({ phone, whatsappVerifiedAt: verifiedAt })}
               />
-              <NumberField label="Sua idade" value={currentPerson.age ?? 0} onChange={(age) => updatePerson({ age })} />
-              <DateField label="Data de nascimento" value={currentPerson.birthDate} onChange={(birthDate) => updatePerson({ birthDate })} />
               <ReadOnlyField label="E-mail da sua conta" value={session.email} />
             </div>
           </EditorSection>
@@ -1934,6 +2059,7 @@ function Shell({
   view,
   setView,
   session,
+  setSession,
   onSignOut
 }: {
   plan: FinancePlan;
@@ -1943,6 +2069,7 @@ function Shell({
   view: View;
   setView: (view: View) => void;
   session: UserSession | null;
+  setSession: Dispatch<SetStateAction<UserSession | null>>;
   onSignOut: () => void;
 }) {
   const [financeMenuOpen, setFinanceMenuOpen] = useState(true);
@@ -1950,25 +2077,45 @@ function Shell({
   const [routineMenuOpen, setRoutineMenuOpen] = useState(true);
   const [healthMenuOpen, setHealthMenuOpen] = useState(true);
   const [homeMenuOpen, setHomeMenuOpen] = useState(true);
-  const activeModule = secretaryViews.has(view)
-    ? "secretary"
-    : routineViews.has(view)
-      ? "routine"
-      : healthViews.has(view)
-        ? "health"
-        : homeViews.has(view)
-          ? "home"
-          : "finance";
+  const canAccessHome = !session || canAccessSharedHome(plan, session.email);
+  const visibleModules = moduleCatalog.filter((module) => module.id !== "home" || canAccessHome);
+  const currentUserName = session ? sessionDisplayName(plan, session.email, session.name) : plan.profile.people[0]?.name || "Espaco pessoal";
+  const hostName = plan.profile.people.find((person) => person.role === "primary")?.name;
+  const linked = Boolean(session && isLinkedPartner(plan, session));
+  const shoppingActor: ShoppingActor | undefined = session
+    ? (() => {
+        const person = findSessionPerson(plan, session);
+        return person ? { personId: person.id, name: person.name } : { name: session.name };
+      })()
+    : undefined;
+  const activeModule =
+    view === "profile"
+      ? ""
+      : secretaryViews.has(view)
+        ? "secretary"
+        : routineViews.has(view)
+          ? "routine"
+          : healthViews.has(view)
+            ? "health"
+            : homeViews.has(view)
+              ? "home"
+              : "finance";
+
+  useEffect(() => {
+    if (!canAccessHome && homeViews.has(view)) setView("dashboard");
+  }, [canAccessHome, setView, view]);
 
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <BrandLockup title={plan.workspace.name || appName} caption={plan.profile.people[0]?.name || "Espaco pessoal"} />
+        <button className="brand-lockup-button" type="button" onClick={() => setView("profile")}>
+          <BrandLockup title={plan.workspace.name || appName} caption={currentUserName} />
+        </button>
 
         <div className="sidebar-section">
           <span>Modulos</span>
           <div className="module-list">
-            {moduleCatalog.map((module) => (
+            {visibleModules.map((module) => (
               <ModuleButton
                 key={module.id}
                 module={module}
@@ -2054,7 +2201,7 @@ function Shell({
           </nav>
         )}
 
-        {activeModule === "home" && (
+        {canAccessHome && activeModule === "home" && (
           <nav className="sidebar-section">
             <button
               className={`nav-section-toggle ${homeMenuOpen ? "open" : ""}`}
@@ -2095,10 +2242,13 @@ function Shell({
           </nav>
         )}
         {session && (
-          <button className="nav-button" onClick={onSignOut}>
-            <Users size={18} />
-            <span>Sair</span>
-          </button>
+          <nav className="sidebar-section">
+            <NavButton icon={<User size={18} />} label="Perfil" active={view === "profile"} onClick={() => setView("profile")} />
+            <button className="nav-button" onClick={onSignOut}>
+              <LogOut size={18} />
+              <span>Sair</span>
+            </button>
+          </nav>
         )}
         <StatusPill saveState={saveState} />
       </aside>
@@ -2127,7 +2277,20 @@ function Shell({
         {view === "health-wallet" && <HealthView plan={plan} setPlan={setPlan} section="wallet" />}
         {view === "health-appointments" && <HealthView plan={plan} setPlan={setPlan} section="appointments" />}
         {view === "health-meds" && <HealthView plan={plan} setPlan={setPlan} section="meds" />}
-        {view === "home-list" && <HomeView plan={plan} setPlan={setPlan} section="list" />}
+        {canAccessHome && view === "home-list" && (
+          <HomeView plan={plan} setPlan={setPlan} section="list" actor={shoppingActor} />
+        )}
+        {view === "profile" && session && (
+          <ProfileView
+            plan={plan}
+            setPlan={setPlan}
+            session={session}
+            setSession={setSession}
+            linked={linked}
+            hostName={hostName}
+            onSignOut={onSignOut}
+          />
+        )}
       </section>
     </main>
   );
@@ -2177,6 +2340,105 @@ function StatusPill({ saveState }: { saveState: SaveState }) {
     <div className={`status-pill ${saveState}`}>
       {saveState === "saving" ? <Loader2 className="spin" size={14} /> : <Database size={14} />}
       {content}
+    </div>
+  );
+}
+
+function ProfileView({
+  plan,
+  setPlan,
+  session,
+  setSession,
+  linked,
+  hostName,
+  onSignOut
+}: {
+  plan: FinancePlan;
+  setPlan: Dispatch<SetStateAction<FinancePlan | null>>;
+  session: UserSession;
+  setSession: Dispatch<SetStateAction<UserSession | null>>;
+  linked: boolean;
+  hostName?: string;
+  onSignOut: () => void;
+}) {
+  const person = findSessionPerson(plan, session);
+  const current = person ?? {
+    id: uid("person"),
+    name: session.name,
+    email: session.email,
+    role: linked ? ("partner" as const) : ("primary" as const),
+    accountStatus: linked ? ("linked" as const) : ("local" as const)
+  };
+
+  const updatePerson = (patch: Partial<Person>) => {
+    setPlan((existing) => {
+      if (!existing) return existing;
+      const exists = existing.profile.people.some((item) => item.id === current.id);
+      const people = exists
+        ? existing.profile.people.map((item) => (item.id === current.id ? { ...item, ...patch } : item))
+        : [...existing.profile.people, { ...current, ...patch }];
+      return {
+        ...existing,
+        profile: {
+          ...existing.profile,
+          people
+        }
+      };
+    });
+    if (patch.name && patch.name.trim() && patch.name.trim() !== session.name) {
+      const nextSession = { ...session, name: patch.name.trim() };
+      persistSession(nextSession);
+      void persistServerSession(nextSession);
+      setSession(nextSession);
+    }
+  };
+
+  return (
+    <div className="page">
+      <PageHeader
+        eyebrow="MyLyfe / Conta"
+        title="Seu perfil"
+        subtitle={
+          linked
+            ? `Estes dados sao seus. O Financeiro compartilhado continua sendo de ${hostName || "quem te convidou"}.`
+            : "Nome, WhatsApp e dados da sua conta neste aparelho."
+        }
+      />
+      <div className="editor-grid">
+        <EditorSection title="Seus dados" icon={<User size={18} />}>
+          <div className="form-grid">
+            <TextField label="Seu nome" value={current.name} onChange={(name) => updatePerson({ name })} />
+            <ReadOnlyField label="E-mail da sua conta" value={session.email} />
+            <WhatsAppPhoneField
+              personId={current.id}
+              phone={current.phone ?? ""}
+              verifiedAt={current.whatsappVerifiedAt}
+              onPhoneChange={(phone, verifiedAt) => updatePerson({ phone, whatsappVerifiedAt: verifiedAt })}
+            />
+            <NumberField label="Sua idade" value={current.age ?? 0} onChange={(age) => updatePerson({ age })} />
+            <DateField
+              label="Data de nascimento"
+              value={current.birthDate}
+              onChange={(birthDate) => updatePerson({ birthDate })}
+            />
+          </div>
+          {linked && (
+            <p className="form-note">
+              Conta vinculada ao Financeiro de {hostName || "outra pessoa"}. Rotina, saude e secretaria desta sessao
+              sao as suas, nao as do titular.
+            </p>
+          )}
+        </EditorSection>
+        <EditorSection title="Sessao" icon={<LogOut size={18} />}>
+          <p className="form-note">Sair nao desfaz o vinculo. Voce entra de novo com {session.email}.</p>
+          <div className="wizard-actions">
+            <button className="secondary-button" type="button" onClick={onSignOut}>
+              <LogOut size={16} />
+              Sair da conta
+            </button>
+          </div>
+        </EditorSection>
+      </div>
     </div>
   );
 }
@@ -2622,8 +2884,8 @@ function AccessView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<Se
     <div className="page">
       <PageHeader
         eyebrow="MyLyfe / Permissoes"
-        title="Acessos do Financeiro"
-        subtitle="Convide pessoas para o modulo financeiro e defina quais partes elas podem visualizar ou editar."
+        title="Acessos da conta"
+        subtitle="Convide pessoas para o Financeiro e, se quiser, compartilhe tambem a lista de mercado."
       />
       <section className="module-overview-grid">
         {moduleCatalog.map((module) => (
@@ -2654,6 +2916,7 @@ function ModuleAccessPanel({
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteSharedAccounts, setInviteSharedAccounts] = useState(true);
+  const [inviteSharedHome, setInviteSharedHome] = useState(true);
   const [inviteSharedPatrimony, setInviteSharedPatrimony] = useState(true);
   const [invitePrimaryShare, setInvitePrimaryShare] = useState(0.5);
   const [inviteRole, setInviteRole] = useState<ModuleAccessRole>("editor");
@@ -2687,6 +2950,7 @@ function ModuleAccessPanel({
       inviteeEmail: inviteEmail.trim() || undefined,
       status: "pending",
       sharedAccounts: inviteSharedAccounts,
+      sharedHome: inviteSharedHome,
       expenseSplit: {
         primaryPercent: Math.round(invitePrimaryShare * 100),
         partnerPercent: Math.max(0, 100 - Math.round(invitePrimaryShare * 100))
@@ -2696,7 +2960,10 @@ function ModuleAccessPanel({
         canEditOwnData: true,
         canEditSharedData: inviteRole === "admin",
         canSeePartnerPrivateData: false,
-        modules: [defaultFinanceModuleAccess(inviteRole, inviteScopes.length ? inviteScopes : ["dashboard"])]
+        modules: [
+          defaultFinanceModuleAccess(inviteRole, inviteScopes.length ? inviteScopes : ["dashboard"]),
+          ...(inviteSharedHome ? [defaultHomeModuleAccess(inviteRole)] : [])
+        ]
       },
       createdAt: new Date().toISOString()
     };
@@ -2725,11 +2992,30 @@ function ModuleAccessPanel({
     setInviteName("");
     setInviteEmail("");
     setInviteSharedAccounts(true);
+    setInviteSharedHome(true);
     setInviteSharedPatrimony(true);
     setInvitePrimaryShare(0.5);
     setInviteRole("editor");
     setInviteScopes(defaultVisibleFinanceScopes());
     await copyInvite(token);
+  };
+
+  const updateSharedHome = (linkId: string, sharedHome: boolean) => {
+    setPlan((current) =>
+      current
+        ? {
+            ...current,
+            profile: {
+              ...current.profile,
+              accountLinks: (current.profile.accountLinks ?? []).map((link) =>
+                link.id === linkId
+                  ? applySharedHomeToAccountLink(link, sharedHome, financeAccessFor(link).role)
+                  : link
+              )
+            }
+          }
+        : current
+    );
   };
 
   const revokeInvite = (linkId: string) => {
@@ -2749,12 +3035,12 @@ function ModuleAccessPanel({
   };
 
   return (
-    <Panel title="Convites do modulo financeiro" icon={<Users size={18} />} wide>
+    <Panel title="Convites e compartilhamento" icon={<Users size={18} />} wide>
       <div className="family-link-panel">
         <header>
           <div>
             <Users size={18} />
-            <strong>Adicionar pessoa ao Financeiro</strong>
+            <strong>Adicionar pessoa a conta</strong>
           </div>
           <span>{accountLinks.filter((link) => link.status === "accepted").length} ativa(s)</span>
         </header>
@@ -2769,6 +3055,12 @@ function ModuleAccessPanel({
           />
           <ToggleField label="Despesas compartilhadas" checked={inviteSharedAccounts} onChange={setInviteSharedAccounts} />
           <ToggleField label="Patrimonio compartilhado" checked={inviteSharedPatrimony} onChange={setInviteSharedPatrimony} />
+          <ToggleField
+            label="Lista de mercado compartilhada"
+            hint="A pessoa entra na mesma lista da Casa, no app e no WhatsApp."
+            checked={inviteSharedHome}
+            onChange={setInviteSharedHome}
+          />
           {inviteSharedAccounts && (
             <>
               <PercentField label="Sua parte nas despesas compartilhadas" value={invitePrimaryShare} onChange={setInvitePrimaryShare} />
@@ -2791,6 +3083,7 @@ function ModuleAccessPanel({
             .reverse()
             .map((link) => {
               const access = financeAccessFor(link);
+              const sharesHome = accountLinkSharesHome(link);
               return (
                 <div className="account-link-card" key={link.id}>
                   <div>
@@ -2799,7 +3092,20 @@ function ModuleAccessPanel({
                       {link.status === "pending" ? "Pendente" : link.status === "accepted" ? "Vinculado" : "Revogado"} ·{" "}
                       {moduleRoleLabels[access.role]}
                     </span>
-                    <small>{financeScopeLabels(access.scopes)}</small>
+                    <small>
+                      {financeScopeLabels(access.scopes)}
+                      {sharesHome ? " · Mercado compartilhado" : " · Sem acesso ao mercado"}
+                    </small>
+                    {link.status !== "revoked" && (
+                      <button
+                        type="button"
+                        className={`home-share-chip ${sharesHome ? "active" : ""}`}
+                        onClick={() => updateSharedHome(link.id, !sharesHome)}
+                      >
+                        <ShoppingBag size={14} />
+                        {sharesHome ? "Mercado compartilhado" : "Compartilhar mercado"}
+                      </button>
+                    )}
                     {link.status !== "revoked" && <code>{inviteUrl(link.token)}</code>}
                   </div>
                   <div className="account-link-actions">
@@ -3133,14 +3439,14 @@ function ProfileStep({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<S
     <EditorSection title="Perfil" icon={<BadgeDollarSign size={18} />}>
       <div className="form-grid">
         <TextField label="Nome" value={primary.name} onChange={(name) => updatePerson(primary.id, { name })} />
+        <NumberField label="Idade" value={primary.age ?? 0} onChange={(age) => updatePerson(primary.id, { age })} />
+        <DateField label="Data de nascimento" value={primary.birthDate} onChange={(birthDate) => updatePerson(primary.id, { birthDate })} />
         <WhatsAppPhoneField
           personId={primary.id}
           phone={primary.phone ?? ""}
           verifiedAt={primary.whatsappVerifiedAt}
           onPhoneChange={(phone, verifiedAt) => updatePerson(primary.id, { phone, whatsappVerifiedAt: verifiedAt })}
         />
-        <NumberField label="Idade" value={primary.age ?? 0} onChange={(age) => updatePerson(primary.id, { age })} />
-        <DateField label="Data de nascimento" value={primary.birthDate} onChange={(birthDate) => updatePerson(primary.id, { birthDate })} />
         <SelectField
           label="Estado civil"
           value={plan.profile.maritalStatus}
@@ -5912,11 +6218,24 @@ function MultiSelectField({
   );
 }
 
-function ToggleField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+function ToggleField({
+  label,
+  hint,
+  checked,
+  onChange
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
   return (
-    <label className="toggle-field">
+    <label className={`toggle-field${hint ? " has-hint" : ""}`}>
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      <span>{label}</span>
+      <span>
+        {label}
+        {hint ? <small>{hint}</small> : null}
+      </span>
     </label>
   );
 }

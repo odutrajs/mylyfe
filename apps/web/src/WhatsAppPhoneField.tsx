@@ -70,33 +70,35 @@ export function WhatsAppPhoneField({
   };
 
   return (
-    <div className="form-grid single">
+    <div className="whatsapp-phone-field">
       <label className="field">
         <span>Seu WhatsApp pessoal</span>
-        <input
-          value={phone}
-          placeholder="41 99999-0000"
-          inputMode="tel"
-          autoComplete="tel"
-          onChange={(event) => {
-            setInfo("");
-            setError("");
-            onPhoneChange(event.target.value);
-          }}
-        />
+        <div className="whatsapp-phone-row">
+          <input
+            value={phone}
+            placeholder="41 99999-0000"
+            inputMode="tel"
+            autoComplete="tel"
+            onChange={(event) => {
+              setInfo("");
+              setError("");
+              onPhoneChange(event.target.value);
+            }}
+          />
+          {!verified && (
+            <button className="secondary-button" type="button" onClick={() => void start()} disabled={!phone.trim() || Boolean(busy)}>
+              {busy === "start" ? <Loader2 className="spin" size={16} /> : <Smartphone size={16} />}
+              {busy === "start" ? "Enviando..." : "Enviar codigo"}
+            </button>
+          )}
+        </div>
       </label>
       {verified ? (
         <p className="form-note">
           <Check size={14} /> Numero confirmado. Gastos, reunioes e consultas deste WhatsApp vao para a sua conta.
         </p>
       ) : (
-        <>
-          <div className="wizard-actions">
-            <button className="secondary-button" type="button" onClick={() => void start()} disabled={!phone.trim() || Boolean(busy)}>
-              {busy === "start" ? <Loader2 className="spin" size={16} /> : <Smartphone size={16} />}
-              {busy === "start" ? "Enviando..." : "Enviar codigo"}
-            </button>
-          </div>
+        <div className="whatsapp-verify-row">
           <label className="field">
             <span>Codigo de 6 digitos</span>
             <input
@@ -111,7 +113,7 @@ export function WhatsAppPhoneField({
             {busy === "confirm" ? <Loader2 className="spin" size={16} /> : <Check size={16} />}
             Confirmar WhatsApp
           </button>
-        </>
+        </div>
       )}
       {info && <p className="form-note">{info}</p>}
       {error && <p className="form-note warn">{error}</p>}

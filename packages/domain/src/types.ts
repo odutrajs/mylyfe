@@ -396,6 +396,7 @@ export interface AccountLink {
   inviteeEmail?: string;
   status: AccountLinkStatus;
   sharedAccounts: boolean;
+  sharedHome: boolean;
   expenseSplit: {
     primaryPercent: number;
     partnerPercent: number;
@@ -762,6 +763,13 @@ export interface CashFlowSnapshot {
   leftoverPercent: number | null;
 }
 
+export interface MonthlyCashFlow {
+  month: string;
+  income: number;
+  outflow: number;
+  net: number;
+}
+
 export interface BudgetSuggestion {
   monthlyExpenseTarget: number;
   monthlyInvestmentTarget: number;
@@ -789,6 +797,20 @@ export interface CategoryBudgetProgress {
   share: number;
   status: CategoryBudgetStatus;
   source: CategoryBudgetSource;
+}
+
+export type CategoryExpenseKind = "transaction" | "recurring" | "forecast";
+
+export interface CategoryExpenseItem {
+  id: string;
+  name: string;
+  amount: number;
+  date?: string;
+  kind: CategoryExpenseKind;
+  installment?: {
+    current: number;
+    total: number;
+  };
 }
 
 export interface PurchaseSimulation {

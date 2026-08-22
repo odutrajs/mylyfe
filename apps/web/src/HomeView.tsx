@@ -1,4 +1,4 @@
-import type { FinancePlan } from "@mylyfe/domain";
+import type { FinancePlan, ShoppingActor } from "@mylyfe/domain";
 import {
   applyShoppingInboxToPlan,
   clearBoughtShoppingItems,
@@ -10,6 +10,7 @@ import {
   normalizeHomeModuleState,
   removeShoppingItem,
   setShoppingItemStatus,
+  sharedHomeMemberNames,
   unlinkShoppingListGroup,
   updateShoppingItemQuantity
 } from "@mylyfe/domain";
@@ -24,11 +25,13 @@ type SecretaryStatus = { state?: string; message?: string };
 
 export function HomeView({
   plan,
-  setPlan
+  setPlan,
+  actor
 }: {
   plan: FinancePlan;
   setPlan: Dispatch<SetStateAction<FinancePlan | null>>;
   section?: HomeSection;
+  actor?: ShoppingActor;
 }) {
   const home = useMemo(() => normalizeHomeModuleState(plan.home), [plan.home]);
   const list = defaultShoppingListOf(home);
@@ -80,12 +83,15 @@ export function HomeView({
   const boughtSectors = useMemo(() => groupShoppingItemsBySector(boughtItems), [boughtItems]);
   const linked = Boolean(list?.whatsappGroupJid);
 
+  const sharedNames = useMemo(() => sharedHomeMemberNames(plan), [plan]);
+
   const addFromDraft = (event?: FormEvent) => {
     event?.preventDefault();
     if (!draft.trim()) return;
+    const owner = plan.profile.people.find((person) => person.role === "primary");
     const result = applyShoppingInboxToPlan(plan, listId, draft.trim(), {
-      personId: plan.profile.people.find((person) => person.role === "primary")?.id,
-      name: plan.profile.people.find((person) => person.role === "primary")?.name
+      personId: actor?.personId ?? owner?.id,
+      name: actor?.name ?? owner?.name
     });
     if (!result.ignored) apply(result.plan);
     setDraft("");
@@ -102,7 +108,11 @@ export function HomeView({
       <header className="page-header">
         <span>MyLyfe / Casa</span>
         <h1>Mercado</h1>
-        <p>Mande o item no grupo do WhatsApp ou escreva aqui. Cada item já entra no setor certo e a lista sai separada por corredor.</p>
+        <p>
+          {sharedNames.length
+            ? `Lista compartilhada com ${sharedNames.join(", ")}. Mande o item no WhatsApp ou escreva aqui.`
+            : "Mande o item no grupo do WhatsApp ou escreva aqui. Cada item ja entra no setor certo e a lista sai separada por corredor."}
+        </p>
       </header>
 
       <section className="metric-grid compact">

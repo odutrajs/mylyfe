@@ -187,9 +187,9 @@ export const startPhoneVerification = async (
   }
 
   const plan = await repository.get(input.planId);
-  const person = input.personId
-    ? plan.profile.people.find((item) => item.id === input.personId)
-    : personByEmailOrPrimary(plan, input.email);
+  const person =
+    (input.personId ? plan.profile.people.find((item) => item.id === input.personId) : undefined) ??
+    (input.email ? plan.profile.people.find((item) => emailsMatch(item.email, input.email)) : undefined);
   if (!person) throw new PhoneVerifyError("Nao achei a pessoa deste plano.", 404);
 
   const claim: PhoneClaim = {

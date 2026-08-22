@@ -123,3 +123,11 @@ export const deleteSessionsForUser = async (userId: string) =>
     store.sessions = pruneSessions(store.sessions).filter((item) => item.userId !== userId);
     await writeStore(store);
   });
+
+export const deleteUser = async (userId: string) =>
+  withLock(async () => {
+    const store = await readStore();
+    store.users = store.users.filter((user) => user.id !== userId);
+    store.sessions = pruneSessions(store.sessions).filter((session) => session.userId !== userId);
+    await writeStore(store);
+  });

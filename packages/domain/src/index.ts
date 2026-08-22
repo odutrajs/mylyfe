@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./defaults.js";
+export * from "./sharing.js";
 export * from "./calculations.js";
 export * from "./classification.js";
 export * from "./secretary.js";

@@ -6,6 +6,7 @@ import { findPlanPeopleByPhone, isSameWhatsappOwner } from "./phone-verify-servi
 import {
   createSessionRecord,
   deleteSessionRecord,
+  deleteUser,
   findSessionRecord,
   findUserByEmail,
   findUserById,
@@ -96,10 +97,10 @@ const resolvePersonalPlanId = async (repository: PlanRepository, email: string) 
 
   for (const id of ids) {
     const plan = await repository.get(id);
-    const matchesEmail = (plan.profile.people ?? []).some(
-      (person) => normalizeEmail(person.email ?? "") === email
+    const matchesPrimaryEmail = (plan.profile.people ?? []).some(
+      (person) => person.role === "primary" && normalizeEmail(person.email ?? "") === email
     );
-    if (matchesEmail && !isEmptyPlan(plan)) return id;
+    if (matchesPrimaryEmail && !isEmptyPlan(plan)) return id;
   }
 
   return preferredId;
@@ -226,6 +227,13 @@ export const sessionFromToken = async (header?: string) => {
 export const logoutUser = async (header?: string) => {
   const token = readToken(header);
   if (token) await deleteSessionRecord(token);
+};
+
+export const deleteUserAccount = async (repository: PlanRepository, header?: string) => {
+  const current = await sessionFromToken(header);
+  const planId = current.user.personalPlanId || current.user.id;
+  await repository.remove(planId);
+  await deleteUser(current.user.id);
 };
 
 export const updateAuthSession = async (

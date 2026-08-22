@@ -22,6 +22,7 @@ import { reconcileInstallmentForecasts } from "./installments.js";
 export interface PlanRepository {
   get(id: string): Promise<FinancePlan>;
   save(plan: FinancePlan): Promise<FinancePlan>;
+  remove(id: string): Promise<void>;
   listIds(): Promise<string[]>;
 }
 
@@ -121,6 +122,7 @@ const ensurePlanShape = (plan: Partial<FinancePlan>, id: string): FinancePlan =>
   const accountLinks = (plan.profile?.accountLinks ?? []).map((link) => ({
     ...link,
     sharedAccounts: link.sharedAccounts ?? base.profile.sharing.sharedAccounts,
+    sharedHome: link.sharedHome !== false,
     expenseSplit: {
       ...base.profile.sharing.expenseSplit,
       ...link.expenseSplit
@@ -247,6 +249,12 @@ export class FilePlanRepository implements PlanRepository {
     }
   }
 
+  async remove(id: string) {
+    await unlink(this.filePath(id)).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    });
+  }
+
   private async peek(id: string) {
     for (let attempt = 0; attempt < 6; attempt += 1) {
       try {
@@ -321,6 +329,10 @@ class PrismaPlanRepository implements PlanRepository {
   async listIds() {
     const rows = (await this.client.financialPlan.findMany({ select: { id: true } })) as Array<{ id: string }>;
     return rows.map((row) => row.id);
+  }
+
+  async remove(id: string) {
+    await this.client.financialPlan.delete({ where: { id } }).catch(() => undefined);
   }
 
   private async peek(id: string) {

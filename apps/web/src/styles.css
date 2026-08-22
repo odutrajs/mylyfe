@@ -481,11 +481,28 @@ button:disabled {
   height: 100vh;
 }
 
+.brand-lockup-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+}
+
+.brand-lockup-button:hover {
+  background: rgba(247, 251, 243, 0.06);
+}
+
 .brand-lockup {
   display: flex;
   align-items: center;
   gap: 12px;
   min-width: 0;
+  padding: 4px;
 }
 
 .brand-lockup strong,
@@ -1416,6 +1433,7 @@ button.module-overview-card:hover {
   display: grid;
   grid-template-columns: repeat(3, minmax(150px, 1fr));
   gap: 12px;
+  align-items: start;
 }
 
 .form-grid.single {
@@ -1429,6 +1447,7 @@ button.module-overview-card:hover {
   display: grid;
   gap: 7px;
   min-width: 0;
+  align-content: start;
 }
 
 .field > span,
@@ -1444,6 +1463,7 @@ button.module-overview-card:hover {
 .field select,
 .select-trigger {
   width: 100%;
+  height: 42px;
   min-height: 42px;
   border: 1px solid #cfd8ce;
   border-radius: 8px;
@@ -1451,6 +1471,39 @@ button.module-overview-card:hover {
   color: #20231f;
   padding: 0 11px;
   outline: none;
+}
+
+.field input[type="color"] {
+  height: 42px;
+  padding: 4px;
+}
+
+.whatsapp-phone-field {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.whatsapp-phone-row,
+.whatsapp-verify-row {
+  display: grid;
+  gap: 8px;
+  align-items: end;
+}
+
+.whatsapp-phone-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.whatsapp-verify-row {
+  grid-template-columns: minmax(140px, 220px) auto;
+}
+
+.whatsapp-phone-row .secondary-button,
+.whatsapp-verify-row .primary-button {
+  height: 42px;
+  white-space: nowrap;
 }
 
 .color-field input {
@@ -1667,6 +1720,45 @@ button.module-overview-card:hover {
   width: 18px;
   height: 18px;
   accent-color: #0f766e;
+}
+
+.toggle-field.has-hint {
+  grid-column: 1 / -1;
+  align-items: start;
+  padding-top: 12px;
+}
+
+.toggle-field span {
+  display: grid;
+  gap: 2px;
+}
+
+.toggle-field small {
+  color: #647066;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.home-share-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #cfd8ce;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #4d574f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.home-share-chip.active {
+  border-color: #0f766e;
+  background: #e6f4ef;
+  color: #0b5f59;
 }
 
 .segmented-field > div {
@@ -2848,8 +2940,15 @@ button.module-overview-card:hover {
 @media (max-width: 560px) {
   .form-grid,
   .item-form,
-  .risk-grid {
+  .risk-grid,
+  .whatsapp-phone-row,
+  .whatsapp-verify-row {
     grid-template-columns: 1fr;
+  }
+
+  .whatsapp-phone-row .secondary-button,
+  .whatsapp-verify-row .primary-button {
+    width: 100%;
   }
 
   .editable-item {
