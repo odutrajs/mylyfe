@@ -61,6 +61,12 @@ export const isLinkedInvitee = (plan: FinancePlan, email?: string) => {
   return Boolean(findAcceptedAccountLinkForEmail(plan, email) || person?.accountStatus === "linked");
 };
 
+export const isWorkspaceAdmin = (plan: FinancePlan, email?: string, personalPlanId?: string) => {
+  if (email && isLinkedInvitee(plan, email)) return false;
+  if (email && findPersonByEmail(plan, email)?.role === "primary") return true;
+  return Boolean(personalPlanId && personalPlanId === plan.id);
+};
+
 export const sessionDisplayName = (plan: FinancePlan, email?: string, fallback?: string) => {
   const person = findPersonByEmail(plan, email);
   return person?.name?.trim() || fallback?.trim() || "Espaco pessoal";

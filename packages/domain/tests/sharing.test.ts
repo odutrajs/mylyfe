@@ -9,6 +9,7 @@ import {
   findAcceptedAccountLinkForEmail,
   findPersonByEmail,
   isLinkedInvitee,
+  isWorkspaceAdmin,
   isPlanOwnerEmail,
   overlayPersonalLifeModules,
   sessionDisplayName,
@@ -111,6 +112,8 @@ describe("linked invitee identity", () => {
     expect(findPersonByEmail(plan, "tainaestats@gmail.com")?.name).toBe("Taina");
     expect(isLinkedInvitee(plan, "tainaestats@gmail.com")).toBe(true);
     expect(isLinkedInvitee(plan, "titular@email.com")).toBe(false);
+    expect(isWorkspaceAdmin(plan, "titular@email.com", "plan-1")).toBe(true);
+    expect(isWorkspaceAdmin(plan, "tainaestats@gmail.com", "personal-taina")).toBe(false);
     expect(sessionDisplayName(plan, "tainaestats@gmail.com", "fallback")).toBe("Taina");
   });
 

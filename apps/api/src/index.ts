@@ -3,6 +3,7 @@ import {
   analyzePlan,
   buildMonthlySnapshot,
   createRuleFromCorrection,
+  isWorkspaceAdmin,
   type FinancePlan,
   type FinancialTransaction,
   type LifeAlert,
@@ -17,6 +18,7 @@ import { transcribeSecretaryAudio } from "./secretary-transcribe.js";
 import { dedupeTransactions, findDuplicateStatementImport, parseCsvStatement, parsePdfStatement } from "./parser.js";
 import {
   AuthError,
+  deleteUserAccount,
   loginUser,
   logoutUser,
   registerUser,
@@ -88,6 +90,15 @@ const fetchSecretaryGateway = async (pathname: string, init?: RequestInit) => {
   });
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   return { ok: response.ok, status: response.status, payload };
+};
+
+const requireWorkspaceAdmin = async (header: string | undefined, planId?: string) => {
+  const current = await sessionFromToken(header);
+  const plan = await repository.get(planId || current.session.planId);
+  if (!isWorkspaceAdmin(plan, current.session.email, current.session.personalPlanId)) {
+    throw new AuthError("So o administrador pode alterar esta configuracao.", 403);
+  }
+  return current;
 };
 const routeParam = (value: string | string[] | undefined, fallback: string) =>
   Array.isArray(value) ? (value[0] ?? fallback) : (value ?? fallback);
@@ -194,6 +205,22 @@ app.post(
   })
 );
 
+app.delete(
+  "/api/auth/me",
+  asyncRoute(async (request, response) => {
+    try {
+      await deleteUserAccount(repository, request.headers.authorization);
+      response.json({ ok: true });
+    } catch (error) {
+      if (error instanceof AuthError) {
+        response.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+  })
+);
+
 app.get(
   "/api/plans/:id",
   asyncRoute(async (request, response) => {
@@ -294,8 +321,18 @@ app.get(
 app.put(
   "/api/plans/:id/secretary/settings",
   asyncRoute(async (request, response) => {
+    const planId = routeParam(request.params.id, "primary");
+    try {
+      await requireWorkspaceAdmin(request.headers.authorization, planId);
+    } catch (error) {
+      if (error instanceof AuthError) {
+        response.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
     const settings = request.body as Partial<SecretarySettings>;
-    const state = await savePlanSecretarySettings(repository, routeParam(request.params.id, "primary"), settings);
+    const state = await savePlanSecretarySettings(repository, planId, settings);
     response.json(state);
   })
 );
@@ -359,7 +396,16 @@ app.get(
 
 app.post(
   "/api/secretary/logout",
-  asyncRoute(async (_request, response) => {
+  asyncRoute(async (request, response) => {
+    try {
+      await requireWorkspaceAdmin(request.headers.authorization);
+    } catch (error) {
+      if (error instanceof AuthError) {
+        response.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
     try {
       const gateway = await fetchSecretaryGateway("/logout", { method: "POST" });
       response.status(gateway.ok ? 200 : gateway.status).json({

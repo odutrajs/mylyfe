@@ -144,14 +144,19 @@ export function SecretaryView({
   plan,
   setPlan,
   section,
+  admin = true,
+  viewerPhone,
   onOpenSection
 }: {
   plan: FinancePlan;
   setPlan: Dispatch<SetStateAction<FinancePlan | null>>;
   section: SecretarySection;
+  admin?: boolean;
+  viewerPhone?: string;
   onOpenSection?: (view: "secretary-home" | "secretary-alerts" | "secretary-whatsapp" | "secretary-settings") => void;
 }) {
   const primary = plan.profile.people.find((person) => person.role === "primary") ?? plan.profile.people[0];
+  const contactPhone = admin ? primary?.phone : viewerPhone;
   const [status, setStatus] = useState<SecretaryStatus>({ state: "offline" });
   const [snapshot, setSnapshot] = useState<SecretarySnapshot | null>(null);
   const [draft, setDraft] = useState(emptyDraft);
@@ -315,6 +320,18 @@ export function SecretaryView({
         .sort((left, right) => left.cycle.dueAt.localeCompare(right.cycle.dueAt)),
     [snapshot]
   );
+
+  if ((section === "whatsapp" || section === "settings") && !admin) {
+    return (
+      <div className="page">
+        <header className="page-header">
+          <span>MyLyfe / Secretaria</span>
+          <h1>Configuracao do projeto</h1>
+          <p>So o administrador conecta o chip da secretaria e altera as preferencias do projeto.</p>
+        </header>
+      </div>
+    );
+  }
 
   if (section === "whatsapp") {
     return (
@@ -638,21 +655,23 @@ export function SecretaryView({
         <p>Uma secretaria da vida, nao uma tela do Financeiro. Ela lembra, pergunta e reagenda.</p>
       </header>
       <section className="metric-grid">
-        <article className={`metric-card ${status.state === "connected" ? "tone-good" : "tone-warn"}`}>
-          <div>
-            <MessageCircle />
-          </div>
-          <span>WhatsApp</span>
-          <strong>{stateLabel(status.state)}</strong>
-          <small>{status.phone ? `Chip: ${status.phone}` : "Pareie o chip da secretaria"}</small>
-        </article>
+        {admin && (
+          <article className={`metric-card ${status.state === "connected" ? "tone-good" : "tone-warn"}`}>
+            <div>
+              <MessageCircle />
+            </div>
+            <span>WhatsApp</span>
+            <strong>{stateLabel(status.state)}</strong>
+            <small>{status.phone ? `Chip: ${status.phone}` : "Pareie o chip da secretaria"}</small>
+          </article>
+        )}
         <article className="metric-card">
           <div>
             <Smartphone />
           </div>
           <span>Seu numero</span>
-          <strong>{primary?.phone || "Nao cadastrado"}</strong>
-          <small>E para este WhatsApp que ela escreve</small>
+          <strong>{contactPhone || "Nao cadastrado"}</strong>
+          <small>{admin ? "E para este WhatsApp que ela escreve" : "Confirme este numero no seu Perfil"}</small>
         </article>
         <article className="metric-card">
           <div>
@@ -664,14 +683,16 @@ export function SecretaryView({
         </article>
       </section>
       <section className="module-overview-grid">
-        <button className="module-overview-card active" type="button" onClick={() => onOpenSection?.("secretary-whatsapp")}>
-          <div>
-            <Smartphone />
-            <strong>WhatsApp</strong>
-          </div>
-          <p>Conectar o chip da secretaria e ver se a sessao esta viva.</p>
-          <span>Configurar</span>
-        </button>
+        {admin && (
+          <button className="module-overview-card active" type="button" onClick={() => onOpenSection?.("secretary-whatsapp")}>
+            <div>
+              <Smartphone />
+              <strong>WhatsApp</strong>
+            </div>
+            <p>Conectar o chip da secretaria e ver se a sessao esta viva.</p>
+            <span>Configurar</span>
+          </button>
+        )}
         <button className="module-overview-card active" type="button" onClick={() => onOpenSection?.("secretary-alerts")}>
           <div>
             <Bell />
@@ -680,14 +701,16 @@ export function SecretaryView({
           <p>Cadastrar contas, impostos, assinaturas e prazos.</p>
           <span>Abrir</span>
         </button>
-        <button className="module-overview-card active" type="button" onClick={() => onOpenSection?.("secretary-settings")}>
-          <div>
-            <SlidersHorizontal />
-            <strong>Preferencias</strong>
-          </div>
-          <p>Seu numero, fuso e horario em que ela pode mandar mensagem.</p>
-          <span>Ajustar</span>
-        </button>
+        {admin && (
+          <button className="module-overview-card active" type="button" onClick={() => onOpenSection?.("secretary-settings")}>
+            <div>
+              <SlidersHorizontal />
+              <strong>Preferencias</strong>
+            </div>
+            <p>Numero do projeto, fuso e horario em que ela pode mandar mensagem.</p>
+            <span>Ajustar</span>
+          </button>
+        )}
       </section>
       <section className="panel wide">
         <header>

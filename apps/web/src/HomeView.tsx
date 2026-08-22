@@ -26,12 +26,14 @@ type SecretaryStatus = { state?: string; message?: string };
 export function HomeView({
   plan,
   setPlan,
-  actor
+  actor,
+  admin = true
 }: {
   plan: FinancePlan;
   setPlan: Dispatch<SetStateAction<FinancePlan | null>>;
   section?: HomeSection;
   actor?: ShoppingActor;
+  admin?: boolean;
 }) {
   const home = useMemo(() => normalizeHomeModuleState(plan.home), [plan.home]);
   const list = defaultShoppingListOf(home);
@@ -233,6 +235,7 @@ export function HomeView({
         </section>
       )}
 
+      {admin && (
       <section className="panel wide">
         <header>
           <div>
@@ -313,6 +316,7 @@ export function HomeView({
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

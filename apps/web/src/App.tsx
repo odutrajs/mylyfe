@@ -86,6 +86,7 @@ import {
   findAcceptedAccountLinkForEmail,
   findPersonByEmail,
   isLinkedInvitee,
+  isWorkspaceAdmin,
   overlayPersonalLifeModules,
   personalLifeModulesFromComposed,
   sessionDisplayName,
@@ -2082,6 +2083,8 @@ function Shell({
   const currentUserName = session ? sessionDisplayName(plan, session.email, session.name) : plan.profile.people[0]?.name || "Espaco pessoal";
   const hostName = plan.profile.people.find((person) => person.role === "primary")?.name;
   const linked = Boolean(session && isLinkedPartner(plan, session));
+  const isAdmin = Boolean(session && isWorkspaceAdmin(plan, session.email, session.personalPlanId));
+  const sessionPerson = session ? findSessionPerson(plan, session) : undefined;
   const shoppingActor: ShoppingActor | undefined = session
     ? (() => {
         const person = findSessionPerson(plan, session);
@@ -2103,7 +2106,10 @@ function Shell({
 
   useEffect(() => {
     if (!canAccessHome && homeViews.has(view)) setView("dashboard");
-  }, [canAccessHome, setView, view]);
+    if (isAdmin) return;
+    if (view === "access") setView("dashboard");
+    if (view === "secretary-whatsapp" || view === "secretary-settings") setView("secretary-home");
+  }, [canAccessHome, isAdmin, setView, view]);
 
   return (
     <main className="app-shell">
@@ -2151,7 +2157,9 @@ function Shell({
                 <NavButton icon={<Palette size={18} />} label="Categorias" active={view === "categories"} onClick={() => setView("categories")} />
                 <NavButton icon={<ClipboardList size={18} />} label="Dados financeiros" active={view === "plan"} onClick={() => setView("plan")} />
                 <NavButton icon={<LineChart size={18} />} label="Historico" active={view === "history"} onClick={() => setView("history")} />
-                <NavButton icon={<ShieldCheck size={18} />} label="Acessos" active={view === "access"} onClick={() => setView("access")} />
+                {isAdmin && (
+                  <NavButton icon={<ShieldCheck size={18} />} label="Acessos" active={view === "access"} onClick={() => setView("access")} />
+                )}
               </div>
             )}
           </nav>
@@ -2172,8 +2180,12 @@ function Shell({
               <div className="nav-submenu">
                 <NavButton icon={<MessageCircle size={18} />} label="Painel" active={view === "secretary-home"} onClick={() => setView("secretary-home")} />
                 <NavButton icon={<Bell size={18} />} label="Lembretes" active={view === "secretary-alerts"} onClick={() => setView("secretary-alerts")} />
-                <NavButton icon={<Smartphone size={18} />} label="WhatsApp" active={view === "secretary-whatsapp"} onClick={() => setView("secretary-whatsapp")} />
-                <NavButton icon={<SlidersHorizontal size={18} />} label="Preferencias" active={view === "secretary-settings"} onClick={() => setView("secretary-settings")} />
+                {isAdmin && (
+                  <>
+                    <NavButton icon={<Smartphone size={18} />} label="WhatsApp" active={view === "secretary-whatsapp"} onClick={() => setView("secretary-whatsapp")} />
+                    <NavButton icon={<SlidersHorizontal size={18} />} label="Preferencias" active={view === "secretary-settings"} onClick={() => setView("secretary-settings")} />
+                  </>
+                )}
               </div>
             )}
           </nav>
@@ -2264,11 +2276,26 @@ function Shell({
           <CategoriesView plan={plan} setPlan={setPlan} analysis={analysis} saveState={saveState} />
         )}
         {view === "history" && <HistoryView plan={plan} setPlan={setPlan} analysis={analysis} />}
-        {view === "access" && <AccessView plan={plan} setPlan={setPlan} />}
-        {view === "secretary-home" && <SecretaryView plan={plan} setPlan={setPlan} section="home" onOpenSection={setView} />}
-        {view === "secretary-alerts" && <SecretaryView plan={plan} setPlan={setPlan} section="alerts" onOpenSection={setView} />}
-        {view === "secretary-whatsapp" && <SecretaryView plan={plan} setPlan={setPlan} section="whatsapp" onOpenSection={setView} />}
-        {view === "secretary-settings" && <SecretaryView plan={plan} setPlan={setPlan} section="settings" onOpenSection={setView} />}
+        {isAdmin && view === "access" && <AccessView plan={plan} setPlan={setPlan} />}
+        {view === "secretary-home" && (
+          <SecretaryView
+            plan={plan}
+            setPlan={setPlan}
+            section="home"
+            admin={isAdmin}
+            viewerPhone={sessionPerson?.phone}
+            onOpenSection={setView}
+          />
+        )}
+        {view === "secretary-alerts" && (
+          <SecretaryView plan={plan} setPlan={setPlan} section="alerts" admin={isAdmin} onOpenSection={setView} />
+        )}
+        {isAdmin && view === "secretary-whatsapp" && (
+          <SecretaryView plan={plan} setPlan={setPlan} section="whatsapp" admin={isAdmin} onOpenSection={setView} />
+        )}
+        {isAdmin && view === "secretary-settings" && (
+          <SecretaryView plan={plan} setPlan={setPlan} section="settings" admin={isAdmin} onOpenSection={setView} />
+        )}
         {(view === "routine-home" || view === "routine-agenda") && <RoutineView plan={plan} setPlan={setPlan} section="agenda" />}
         {view === "routine-tasks" && <RoutineView plan={plan} setPlan={setPlan} section="tasks" />}
         {view === "routine-contexts" && <RoutineView plan={plan} setPlan={setPlan} section="contexts" />}
@@ -2278,7 +2305,7 @@ function Shell({
         {view === "health-appointments" && <HealthView plan={plan} setPlan={setPlan} section="appointments" />}
         {view === "health-meds" && <HealthView plan={plan} setPlan={setPlan} section="meds" />}
         {canAccessHome && view === "home-list" && (
-          <HomeView plan={plan} setPlan={setPlan} section="list" actor={shoppingActor} />
+          <HomeView plan={plan} setPlan={setPlan} section="list" actor={shoppingActor} admin={isAdmin} />
         )}
         {view === "profile" && session && (
           <ProfileView
