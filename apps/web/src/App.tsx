@@ -20,6 +20,8 @@ import {
   Database,
   Download,
   EllipsisVertical,
+  Eye,
+  EyeOff,
   FileUp,
   Gauge,
   GraduationCap,
@@ -5470,10 +5472,34 @@ function TextField({
   type?: string;
   autoComplete?: string;
 }) {
+  const [visible, setVisible] = useState(false);
+  const isPassword = type === "password";
+  const inputType = isPassword && visible ? "text" : type;
+
   return (
     <label className="field">
       {label && <span>{label}</span>}
-      <input type={type} autoComplete={autoComplete} value={value} onChange={(event) => onChange(event.target.value)} />
+      {isPassword ? (
+        <div className="field-input-wrap">
+          <input
+            type={inputType}
+            autoComplete={autoComplete}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          <button
+            type="button"
+            className="field-reveal"
+            onClick={() => setVisible((current) => !current)}
+            aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
+            aria-pressed={visible}
+          >
+            {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
+      ) : (
+        <input type={type} autoComplete={autoComplete} value={value} onChange={(event) => onChange(event.target.value)} />
+      )}
     </label>
   );
 }

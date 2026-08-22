@@ -407,6 +407,14 @@ button:disabled {
   box-shadow: 0 0 0 4px rgba(106, 168, 92, 0.16);
 }
 
+.auth-landing .auth-card .field-input-wrap input {
+  padding-right: 46px;
+}
+
+.auth-landing .auth-card .field-reveal {
+  color: #5d6a5d;
+}
+
 .auth-submit {
   min-height: 50px;
   border-radius: 16px;
@@ -1454,6 +1462,38 @@ button.module-overview-card:hover {
 .select-trigger:focus-visible {
   border-color: #0f766e;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.field-input-wrap {
+  position: relative;
+}
+
+.field-input-wrap input {
+  padding-right: 42px;
+}
+
+.field-reveal {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #566157;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.field-reveal:hover,
+.field-reveal:focus-visible {
+  color: #20231f;
+  background: rgba(32, 35, 31, 0.06);
+  outline: none;
 }
 
 .select-field {
