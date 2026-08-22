@@ -2,7 +2,7 @@ import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:cry
 import { promisify } from "node:util";
 import { isValidWhatsappPhone, normalizePhone, type FinancePlan } from "@mylyfe/domain";
 import type { PlanRepository } from "./repository.js";
-import { findPlanPersonByPhone } from "./phone-verify-service.js";
+import { findPlanPeopleByPhone, isSameWhatsappOwner } from "./phone-verify-service.js";
 import {
   createSessionRecord,
   deleteSessionRecord,
@@ -161,7 +161,8 @@ export const registerUser = async (
     if (!isValidWhatsappPhone(phone)) {
       throw new AuthError("Informe um WhatsApp valido com DDD. Ex: 41 99999-0000.");
     }
-    if (await findPlanPersonByPhone(repository, phone)) {
+    const holders = await findPlanPeopleByPhone(repository, phone);
+    if (holders.some((item) => item.person.whatsappVerifiedAt && !isSameWhatsappOwner(item, { planId: "", personId: "", email }))) {
       throw new AuthError("Este WhatsApp ja esta ligado a outra conta MyLyfe.");
     }
   }

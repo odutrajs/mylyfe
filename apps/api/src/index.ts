@@ -418,6 +418,7 @@ app.post(
           planId: current.session.planId,
           personId: body.personId,
           email: current.session.email,
+          personalPlanId: current.session.personalPlanId,
           phone: body.phone
         })
       );

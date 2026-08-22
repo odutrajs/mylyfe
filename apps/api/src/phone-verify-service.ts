@@ -15,25 +15,92 @@ export class PhoneVerifyError extends Error {
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
+const normalizeEmail = (value?: string) => (value ?? "").trim().toLowerCase();
+
+const emailsMatch = (left?: string, right?: string) => {
+  const a = normalizeEmail(left);
+  const b = normalizeEmail(right);
+  return Boolean(a && b && a === b);
+};
+
 export const personByEmailOrPrimary = (plan: FinancePlan, email?: string) => {
   const byEmail = email
-    ? plan.profile.people.find((person) => (person.email ?? "").trim().toLowerCase() === email.trim().toLowerCase())
+    ? plan.profile.people.find((person) => emailsMatch(person.email, email))
     : undefined;
   return byEmail ?? plan.profile.people.find((person) => person.role === "primary") ?? plan.profile.people[0];
 };
 
-export const findPlanPersonByPhone = async (repository: PlanRepository, phone: string) => {
+export type PhoneHolder = {
+  plan: FinancePlan;
+  person: Person;
+};
+
+export type PhoneClaim = {
+  planId: string;
+  personId: string;
+  email?: string;
+  personalPlanId?: string;
+};
+
+export const findPlanPeopleByPhone = async (repository: PlanRepository, phone: string) => {
   const normalized = normalizePhone(phone);
-  if (!normalized) return null;
-  let unverified: { plan: FinancePlan; person: Person } | null = null;
+  if (!normalized) return [] as PhoneHolder[];
+
+  const matches: PhoneHolder[] = [];
   for (const planId of await repository.listIds()) {
     const plan = await repository.get(planId);
-    const person = plan.profile.people.find((item) => phonesMatch(item.phone, normalized));
-    if (!person) continue;
-    if (person.whatsappVerifiedAt) return { plan, person };
-    unverified ??= { plan, person };
+    for (const person of plan.profile.people ?? []) {
+      if (phonesMatch(person.phone, normalized)) matches.push({ plan, person });
+    }
   }
-  return unverified;
+  return matches;
+};
+
+export const findPlanPersonByPhone = async (repository: PlanRepository, phone: string) => {
+  const matches = await findPlanPeopleByPhone(repository, phone);
+  return (
+    matches.find((item) => item.person.whatsappVerifiedAt) ??
+    matches.find((item) => item.person.role === "partner" || item.person.accountStatus === "linked") ??
+    matches[0] ??
+    null
+  );
+};
+
+export const isSameWhatsappOwner = (holder: PhoneHolder, claim: PhoneClaim) => {
+  if (holder.plan.id === claim.planId && holder.person.id === claim.personId) return true;
+  if (emailsMatch(holder.person.email, claim.email)) return true;
+  if (claim.personalPlanId && holder.plan.id === claim.personalPlanId) return true;
+  return false;
+};
+
+const clearPersonPhone = async (repository: PlanRepository, planId: string, personId: string) => {
+  const plan = await repository.get(planId);
+  return repository.save({
+    ...plan,
+    profile: {
+      ...plan.profile,
+      people: plan.profile.people.map((person) => {
+        if (person.id !== personId) return person;
+        const { phone: _phone, whatsappVerifiedAt: _verified, ...rest } = person;
+        return rest;
+      })
+    }
+  });
+};
+
+const isForeignVerifiedHolder = (holder: PhoneHolder, claim: PhoneClaim) =>
+  Boolean(holder.person.whatsappVerifiedAt) && !isSameWhatsappOwner(holder, claim);
+
+const releasePhoneFromOtherOwners = async (repository: PlanRepository, phone: string, claim: PhoneClaim) => {
+  const matches = await findPlanPeopleByPhone(repository, phone);
+  if (matches.some((item) => isForeignVerifiedHolder(item, claim))) {
+    throw new PhoneVerifyError("Este WhatsApp ja esta ligado a outra conta MyLyfe.");
+  }
+
+  for (const match of matches) {
+    if (match.plan.id === claim.planId && match.person.id === claim.personId) continue;
+    await clearPersonPhone(repository, match.plan.id, match.person.id);
+  }
 };
 
 export const sanitizePlanWhatsappIdentity = async (repository: PlanRepository, planId: string, incoming: FinancePlan) => {
@@ -46,8 +113,13 @@ export const sanitizePlanWhatsappIdentity = async (repository: PlanRepository, p
     const previousPhone = normalizePhone(previous?.phone);
     const phoneChanged = nextPhone !== previousPhone;
     if (nextPhone && phoneChanged) {
-      const taken = await findPlanPersonByPhone(repository, nextPhone);
-      if (taken && !(taken.plan.id === planId && taken.person.id === person.id)) {
+      const matches = await findPlanPeopleByPhone(repository, nextPhone);
+      const claim: PhoneClaim = {
+        planId,
+        personId: person.id,
+        email: person.email || previous?.email
+      };
+      if (matches.some((item) => isForeignVerifiedHolder(item, claim))) {
         people.push({
           ...person,
           phone: previous?.phone,
@@ -55,6 +127,7 @@ export const sanitizePlanWhatsappIdentity = async (repository: PlanRepository, p
         });
         continue;
       }
+      await releasePhoneFromOtherOwners(repository, nextPhone, claim);
     }
     people.push({
       ...person,
@@ -106,7 +179,7 @@ const savePersonPhone = async (
 
 export const startPhoneVerification = async (
   repository: PlanRepository,
-  input: { planId: string; personId?: string; email?: string; phone?: string }
+  input: { planId: string; personId?: string; email?: string; phone?: string; personalPlanId?: string }
 ) => {
   const phone = normalizePhone(input.phone);
   if (!isValidWhatsappPhone(phone)) {
@@ -119,10 +192,13 @@ export const startPhoneVerification = async (
     : personByEmailOrPrimary(plan, input.email);
   if (!person) throw new PhoneVerifyError("Nao achei a pessoa deste plano.", 404);
 
-  const taken = await findPlanPersonByPhone(repository, phone);
-  if (taken && !(taken.plan.id === plan.id && taken.person.id === person.id)) {
-    throw new PhoneVerifyError("Este WhatsApp ja esta ligado a outra conta MyLyfe.");
-  }
+  const claim: PhoneClaim = {
+    planId: plan.id,
+    personId: person.id,
+    email: person.email || input.email,
+    personalPlanId: input.personalPlanId
+  };
+  await releasePhoneFromOtherOwners(repository, phone, claim);
 
   const code = String(randomInt(100000, 1000000));
   await upsertPhoneVerification({
@@ -165,6 +241,14 @@ export const confirmPhoneVerification = async (
     }
     throw new PhoneVerifyError("Codigo invalido ou vencido.");
   }
+
+  const current = await repository.get(pending.planId);
+  const pendingPerson = current.profile.people.find((item) => item.id === pending.personId);
+  await releasePhoneFromOtherOwners(repository, phone, {
+    planId: pending.planId,
+    personId: pending.personId,
+    email: pendingPerson?.email
+  });
 
   const plan = await savePersonPhone(repository, pending.planId, pending.personId, {
     phone,
