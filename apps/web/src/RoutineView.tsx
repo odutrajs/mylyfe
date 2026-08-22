@@ -140,12 +140,15 @@ const touch = (state: RoutineModuleState): RoutineModuleState =>
 export function RoutineView({
   plan,
   setPlan,
-  section
+  section,
+  lifePlanId
 }: {
   plan: FinancePlan;
   setPlan: Dispatch<SetStateAction<FinancePlan | null>>;
   section: RoutineSection;
+  lifePlanId?: string;
 }) {
+  const routinePlanId = lifePlanId || plan.id;
   const routine = useMemo(() => normalizeRoutineModuleState(plan.routine), [plan.routine]);
   const [capture, setCapture] = useState("");
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("today");
@@ -171,7 +174,7 @@ export function RoutineView({
   };
 
   const loadCalendarSnapshot = async () => {
-    const response = await apiRequest(`/plans/${plan.id}/routine`);
+    const response = await apiRequest(`/plans/${routinePlanId}/routine`);
     if (!response.ok) throw new Error("Nao foi possivel carregar a agenda.");
     const payload = (await response.json()) as RoutineModuleState & {
       connections?: RoutineConnection[];
@@ -187,13 +190,28 @@ export function RoutineView({
     setMicrosoftConfigured(payload.microsoftConfigured !== false);
     setPlan((current) => {
       if (!current) return current;
-      if (payload.updatedAt && current.routine?.updatedAt === payload.updatedAt) return current;
+      const connectionIds = new Set((payload.connections ?? []).map((item) => item.id));
+      const appointmentIds = new Set((current.health?.appointments ?? []).map((item) => item.id));
+      const incomingLinks = payload.calendarLinks ?? current.routine.calendarLinks;
+      const calendarLinks =
+        routinePlanId === plan.id ? incomingLinks : incomingLinks.filter((link) => connectionIds.has(link.connectionId));
+      const localEvents = (payload.localEvents ?? current.routine.localEvents).filter(
+        (event) => !event.healthAppointmentId || appointmentIds.has(event.healthAppointmentId)
+      );
+      if (
+        payload.updatedAt &&
+        current.routine?.updatedAt === payload.updatedAt &&
+        calendarLinks.length === (current.routine.calendarLinks ?? []).length &&
+        localEvents.length === (current.routine.localEvents ?? []).length
+      ) {
+        return current;
+      }
       return {
         ...current,
         routine: normalizeRoutineModuleState({
           ...current.routine,
-          calendarLinks: payload.calendarLinks ?? current.routine.calendarLinks,
-          localEvents: payload.localEvents ?? current.routine.localEvents,
+          calendarLinks,
+          localEvents,
           settings: payload.settings ?? current.routine.settings,
           updatedAt: payload.updatedAt ?? current.routine.updatedAt
         })
@@ -214,7 +232,7 @@ export function RoutineView({
     return () => {
       active = false;
     };
-  }, [plan.id]);
+  }, [routinePlanId]);
 
   const dayKey = zonedDayKey(new Date(), routine.settings.timezone);
   const agendaEvents = useMemo(
@@ -341,7 +359,7 @@ export function RoutineView({
     setBusy("connect");
     setNotice("");
     try {
-      const response = await apiRequest(`/routine/google/connect?planId=${encodeURIComponent(plan.id)}`);
+      const response = await apiRequest(`/routine/google/connect?planId=${encodeURIComponent(routinePlanId)}`);
       const payload = (await response.json()) as { url?: string; error?: string };
       if (!response.ok || !payload.url) throw new Error(payload.error || "Nao foi possivel iniciar o Google.");
       window.location.href = payload.url;
@@ -355,7 +373,7 @@ export function RoutineView({
     setBusy("connect-microsoft");
     setNotice("");
     try {
-      const response = await apiRequest(`/routine/microsoft/connect?planId=${encodeURIComponent(plan.id)}`);
+      const response = await apiRequest(`/routine/microsoft/connect?planId=${encodeURIComponent(routinePlanId)}`);
       const payload = (await response.json()) as { url?: string; error?: string };
       if (!response.ok || !payload.url) throw new Error(payload.error || "Nao foi possivel iniciar o Teams.");
       window.location.href = payload.url;
@@ -366,7 +384,7 @@ export function RoutineView({
   };
 
   const persistRoutine = async (next = routine) => {
-    await apiRequest(`/plans/${plan.id}/routine`, {
+    await apiRequest(`/plans/${routinePlanId}/routine`, {
       method: "PATCH",
       body: JSON.stringify(next)
     });
@@ -379,7 +397,7 @@ export function RoutineView({
       await persistRoutine();
       const response = await apiRequest("/routine/sync", {
         method: "POST",
-        body: JSON.stringify({ planId: plan.id })
+        body: JSON.stringify({ planId: routinePlanId })
       });
       const payload = (await response.json()) as {
         events?: RoutineCalendarEvent[];
@@ -403,7 +421,7 @@ export function RoutineView({
   const disconnectGoogle = async (connectionId: string) => {
     setBusy(connectionId);
     try {
-      const response = await apiRequest(`/routine/google/connections/${connectionId}?planId=${encodeURIComponent(plan.id)}`, {
+      const response = await apiRequest(`/routine/google/connections/${connectionId}?planId=${encodeURIComponent(routinePlanId)}`, {
         method: "DELETE"
       });
       if (!response.ok) throw new Error("Nao foi possivel desvincular.");

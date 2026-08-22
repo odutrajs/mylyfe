@@ -4,6 +4,7 @@ import {
   buildMonthlySnapshot,
   createRuleFromCorrection,
   isWorkspaceAdmin,
+  lifeModulePlanId,
   type FinancePlan,
   type FinancialTransaction,
   type LifeAlert,
@@ -99,6 +100,20 @@ const requireWorkspaceAdmin = async (header: string | undefined, planId?: string
     throw new AuthError("So o administrador pode alterar esta configuracao.", 403);
   }
   return current;
+};
+
+const resolveRoutinePlanId = async (header: string | undefined, requestedPlanId: string) => {
+  const planId = requestedPlanId.trim();
+  if (!planId) throw new AuthError("Informe o plano.", 400);
+  if (!header) return planId;
+  try {
+    const current = await sessionFromToken(header);
+    const plan = await repository.get(planId);
+    return lifeModulePlanId(plan, current.session.email, current.session.personalPlanId);
+  } catch (error) {
+    if (error instanceof AuthError && error.message === "Informe o plano.") throw error;
+    return planId;
+  }
 };
 const routeParam = (value: string | string[] | undefined, fallback: string) =>
   Array.isArray(value) ? (value[0] ?? fallback) : (value ?? fallback);
@@ -564,7 +579,7 @@ app.get(
 app.get(
   "/api/plans/:id/routine",
   asyncRoute(async (request, response) => {
-    const planId = routeParam(request.params.id, "primary");
+    const planId = await resolveRoutinePlanId(request.headers.authorization, routeParam(request.params.id, "primary"));
     const [state, connections, events] = await Promise.all([
       routineSnapshot(repository, planId),
       listPublicConnections(planId),
@@ -584,7 +599,8 @@ app.get(
 app.patch(
   "/api/plans/:id/routine",
   asyncRoute(async (request, response) => {
-    const state = await saveRoutineState(repository, routeParam(request.params.id, "primary"), request.body as Partial<RoutineModuleState>);
+    const planId = await resolveRoutinePlanId(request.headers.authorization, routeParam(request.params.id, "primary"));
+    const state = await saveRoutineState(repository, planId, request.body as Partial<RoutineModuleState>);
     response.json(state);
   })
 );
@@ -593,9 +609,10 @@ app.get(
   "/api/routine/google/connect",
   asyncRoute(async (request, response) => {
     try {
-      response.json(await startGoogleConnect(String(request.query.planId ?? ""), requestWebOrigin(request)));
+      const planId = await resolveRoutinePlanId(request.headers.authorization, String(request.query.planId ?? ""));
+      response.json(await startGoogleConnect(planId, requestWebOrigin(request)));
     } catch (error) {
-      if (error instanceof RoutineError) {
+      if (error instanceof RoutineError || error instanceof AuthError) {
         response.status(error.status).json({ error: error.message });
         return;
       }
@@ -628,9 +645,10 @@ app.get(
   "/api/routine/microsoft/connect",
   asyncRoute(async (request, response) => {
     try {
-      response.json(await startMicrosoftConnect(String(request.query.planId ?? ""), requestWebOrigin(request)));
+      const planId = await resolveRoutinePlanId(request.headers.authorization, String(request.query.planId ?? ""));
+      response.json(await startMicrosoftConnect(planId, requestWebOrigin(request)));
     } catch (error) {
-      if (error instanceof RoutineError) {
+      if (error instanceof RoutineError || error instanceof AuthError) {
         response.status(error.status).json({ error: error.message });
         return;
       }
@@ -664,11 +682,11 @@ app.get(
   "/api/routine/google/connections/:id/calendars",
   asyncRoute(async (request, response) => {
     try {
-      response.json(
-        await refreshConnectionCalendars(routeParam(request.params.id, ""), String(request.query.planId ?? "") || undefined)
-      );
+      const requested = String(request.query.planId ?? "");
+      const planId = requested ? await resolveRoutinePlanId(request.headers.authorization, requested) : undefined;
+      response.json(await refreshConnectionCalendars(routeParam(request.params.id, ""), planId));
     } catch (error) {
-      if (error instanceof RoutineError) {
+      if (error instanceof RoutineError || error instanceof AuthError) {
         response.status(error.status).json({ error: error.message });
         return;
       }
@@ -681,9 +699,11 @@ app.delete(
   "/api/routine/google/connections/:id",
   asyncRoute(async (request, response) => {
     try {
-      response.json(await removeGoogleConnection(repository, routeParam(request.params.id, ""), String(request.query.planId ?? "") || undefined));
+      const requested = String(request.query.planId ?? "");
+      const planId = requested ? await resolveRoutinePlanId(request.headers.authorization, requested) : undefined;
+      response.json(await removeGoogleConnection(repository, routeParam(request.params.id, ""), planId));
     } catch (error) {
-      if (error instanceof RoutineError) {
+      if (error instanceof RoutineError || error instanceof AuthError) {
         response.status(error.status).json({ error: error.message });
         return;
       }
@@ -695,15 +715,14 @@ app.delete(
 app.post(
   "/api/routine/sync",
   asyncRoute(async (request, response) => {
-    const planId = String((request.body as { planId?: string })?.planId ?? request.query.planId ?? "");
-    if (!planId) {
-      response.status(400).json({ error: "Informe o plano." });
-      return;
-    }
     try {
+      const planId = await resolveRoutinePlanId(
+        request.headers.authorization,
+        String((request.body as { planId?: string })?.planId ?? request.query.planId ?? "")
+      );
       response.json(await syncRoutineCalendars(repository, planId));
     } catch (error) {
-      if (error instanceof RoutineError) {
+      if (error instanceof RoutineError || error instanceof AuthError) {
         response.status(error.status).json({ error: error.message });
         return;
       }
@@ -715,12 +734,16 @@ app.post(
 app.get(
   "/api/routine/events",
   asyncRoute(async (request, response) => {
-    const planId = String(request.query.planId ?? "");
-    if (!planId) {
-      response.status(400).json({ error: "Informe o plano." });
-      return;
+    try {
+      const planId = await resolveRoutinePlanId(request.headers.authorization, String(request.query.planId ?? ""));
+      response.json(await listRoutineEvents(planId, String(request.query.from ?? "") || undefined, String(request.query.to ?? "") || undefined));
+    } catch (error) {
+      if (error instanceof AuthError) {
+        response.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
     }
-    response.json(await listRoutineEvents(planId, String(request.query.from ?? "") || undefined, String(request.query.to ?? "") || undefined));
   })
 );
 

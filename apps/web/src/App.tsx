@@ -87,8 +87,10 @@ import {
   findPersonByEmail,
   isLinkedInvitee,
   isWorkspaceAdmin,
+  lifeModulePlanId,
   overlayPersonalLifeModules,
   personalLifeModulesFromComposed,
+  stripHostLifeFromPersonal,
   sessionDisplayName,
   sharedPlanFromComposed,
   defaultExpenseCategories,
@@ -1217,7 +1219,10 @@ export default function App() {
         ) {
           const personalResponse = await apiRequest(`/plans/${currentSession.personalPlanId}`);
           if (personalResponse.ok) {
-            const personal = normalizePlanForClient((await personalResponse.json()) as FinancePlan);
+            const personal = stripHostLifeFromPersonal(
+              normalizePlanForClient((await personalResponse.json()) as FinancePlan),
+              remote
+            );
             personalPlanSnapshotRef.current = personal;
             remote = overlayPersonalLifeModules(remote, personal, currentSession.email);
           }
@@ -1281,7 +1286,8 @@ export default function App() {
           const personalToSave = personalLifeModulesFromComposed(
             normalizedPlan,
             personalPlanSnapshotRef.current,
-            currentSession.email
+            currentSession.email,
+            sharedPlanSnapshotRef.current
           );
           const [sharedResponse, personalResponse] = await Promise.all([
             apiRequest(`/plans/${activePlanId}`, {
@@ -1343,7 +1349,8 @@ export default function App() {
         const personalToSave = personalLifeModulesFromComposed(
           normalizedPlan,
           personalPlanSnapshotRef.current,
-          currentSession.email
+          currentSession.email,
+          sharedPlanSnapshotRef.current
         );
         void apiRequest(`/plans/${activePlanId}`, {
           method: "PUT",
@@ -2084,6 +2091,7 @@ function Shell({
   const hostName = plan.profile.people.find((person) => person.role === "primary")?.name;
   const linked = Boolean(session && isLinkedPartner(plan, session));
   const isAdmin = Boolean(session && isWorkspaceAdmin(plan, session.email, session.personalPlanId));
+  const lifePlanId = session ? lifeModulePlanId(plan, session.email, session.personalPlanId) : plan.id;
   const sessionPerson = session ? findSessionPerson(plan, session) : undefined;
   const shoppingActor: ShoppingActor | undefined = session
     ? (() => {
@@ -2296,10 +2304,16 @@ function Shell({
         {isAdmin && view === "secretary-settings" && (
           <SecretaryView plan={plan} setPlan={setPlan} section="settings" admin={isAdmin} onOpenSection={setView} />
         )}
-        {(view === "routine-home" || view === "routine-agenda") && <RoutineView plan={plan} setPlan={setPlan} section="agenda" />}
-        {view === "routine-tasks" && <RoutineView plan={plan} setPlan={setPlan} section="tasks" />}
-        {view === "routine-contexts" && <RoutineView plan={plan} setPlan={setPlan} section="contexts" />}
-        {view === "routine-calendars" && <RoutineView plan={plan} setPlan={setPlan} section="calendars" />}
+        {(view === "routine-home" || view === "routine-agenda") && (
+          <RoutineView plan={plan} setPlan={setPlan} section="agenda" lifePlanId={lifePlanId} />
+        )}
+        {view === "routine-tasks" && <RoutineView plan={plan} setPlan={setPlan} section="tasks" lifePlanId={lifePlanId} />}
+        {view === "routine-contexts" && (
+          <RoutineView plan={plan} setPlan={setPlan} section="contexts" lifePlanId={lifePlanId} />
+        )}
+        {view === "routine-calendars" && (
+          <RoutineView plan={plan} setPlan={setPlan} section="calendars" lifePlanId={lifePlanId} />
+        )}
         {view === "health-home" && <HealthView plan={plan} setPlan={setPlan} section="home" />}
         {view === "health-wallet" && <HealthView plan={plan} setPlan={setPlan} section="wallet" />}
         {view === "health-appointments" && <HealthView plan={plan} setPlan={setPlan} section="appointments" />}

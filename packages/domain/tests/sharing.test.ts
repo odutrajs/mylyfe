@@ -11,10 +11,12 @@ import {
   isLinkedInvitee,
   isWorkspaceAdmin,
   isPlanOwnerEmail,
+  lifeModulePlanId,
   overlayPersonalLifeModules,
   sessionDisplayName,
   sharedHomeMemberNames,
   sharedPlanFromComposed,
+  stripHostLifeFromPersonal,
   type AccountLink
 } from "../src/index.js";
 
@@ -115,6 +117,61 @@ describe("linked invitee identity", () => {
     expect(isWorkspaceAdmin(plan, "titular@email.com", "plan-1")).toBe(true);
     expect(isWorkspaceAdmin(plan, "tainaestats@gmail.com", "personal-taina")).toBe(false);
     expect(sessionDisplayName(plan, "tainaestats@gmail.com", "fallback")).toBe("Taina");
+    expect(lifeModulePlanId(plan, "titular@email.com", "plan-1")).toBe("plan-1");
+    expect(lifeModulePlanId(plan, "tainaestats@gmail.com", "personal-taina")).toBe("personal-taina");
+  });
+
+  it("strips host calendars and events that leaked into the invitee personal plan", () => {
+    const shared = createEmptyPlan("shared");
+    const personal = createEmptyPlan("personal");
+    shared.routine = {
+      ...shared.routine,
+      calendarLinks: [
+        {
+          id: "link-host",
+          connectionId: "conn-host",
+          externalCalendarId: "primary",
+          name: "thiago.dutra@vendepay.com",
+          color: "#ea580c",
+          enabled: true
+        }
+      ],
+      localEvents: [
+        {
+          id: "evt-fisio",
+          source: "health",
+          title: "Fisioterapia",
+          start: "2026-08-20T14:00:00.000Z",
+          end: "2026-08-20T15:00:00.000Z",
+          allDay: false,
+          healthAppointmentId: "appt-host"
+        }
+      ],
+      tasks: [
+        {
+          id: "task-host",
+          contextId: "context-work",
+          title: "Daily",
+          status: "todo",
+          priority: "none",
+          focusToday: false,
+          subtasks: [],
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    };
+    personal.routine = {
+      ...personal.routine,
+      calendarLinks: shared.routine.calendarLinks,
+      localEvents: shared.routine.localEvents,
+      tasks: shared.routine.tasks
+    };
+
+    const cleaned = stripHostLifeFromPersonal(personal, shared);
+    expect(cleaned.routine.calendarLinks).toEqual([]);
+    expect(cleaned.routine.localEvents).toEqual([]);
+    expect(cleaned.routine.tasks).toEqual([]);
   });
 
   it("keeps the host routine on the shared plan when overlaying a linked workspace", () => {
