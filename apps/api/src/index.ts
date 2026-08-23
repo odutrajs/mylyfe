@@ -812,5 +812,5 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 });
 
 app.listen(port, () => {
-  console.log(`MyLyfe API running on http://localhost:${port}`);
+  console.log(`Zelo API running on http://localhost:${port}`);
 });

@@ -449,7 +449,7 @@ export function RoutineView({
 
   const header = (title: string, subtitle: string) => (
     <header className="page-header">
-      <span>MyLyfe / Rotina</span>
+      <span>Zelo / Rotina</span>
       <h1>{title}</h1>
       <p>{subtitle}</p>
     </header>

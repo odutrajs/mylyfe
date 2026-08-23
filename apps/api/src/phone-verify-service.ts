@@ -94,7 +94,7 @@ const isForeignVerifiedHolder = (holder: PhoneHolder, claim: PhoneClaim) =>
 const releasePhoneFromOtherOwners = async (repository: PlanRepository, phone: string, claim: PhoneClaim) => {
   const matches = await findPlanPeopleByPhone(repository, phone);
   if (matches.some((item) => isForeignVerifiedHolder(item, claim))) {
-    throw new PhoneVerifyError("Este WhatsApp ja esta ligado a outra conta MyLyfe.");
+    throw new PhoneVerifyError("Este WhatsApp ja esta ligado a outra conta Zelo.");
   }
 
   for (const match of matches) {
@@ -212,7 +212,7 @@ export const startPhoneVerification = async (
   await savePersonPhone(repository, plan.id, person.id, { phone, whatsappVerifiedAt: undefined });
   await sendWhatsApp(
     phone,
-    `Seu codigo MyLyfe e *${code}*. Vale por 10 minutos. Se nao foi voce, ignora esta mensagem.`
+    `Seu codigo Zelo e *${code}*. Vale por 10 minutos. Se nao foi voce, ignora esta mensagem.`
   );
 
   return { phone, expiresInMinutes: 10 };

@@ -190,7 +190,7 @@ type UserSession = {
   email: string;
   personalPlanId?: string;
 };
-const appName = "MyLyfe";
+const appName = "Zelo";
 const financeModuleId = "finance";
 const secretaryViews = new Set<View>(["secretary-home", "secretary-alerts", "secretary-whatsapp", "secretary-settings"]);
 const routineViews = new Set<View>(["routine-home", "routine-agenda", "routine-tasks", "routine-contexts", "routine-calendars"]);
@@ -253,10 +253,10 @@ const moduleCatalog = [
 ] as const;
 
 const chartColors = {
-  conservative: "#0f766e",
+  conservative: "#2F5D73",
   base: "#b45309",
   optimistic: "#be123c",
-  accent: "#2563eb"
+  accent: "#0878F9"
 };
 
 const commitmentLabels: Record<CommitmentStatus, string> = {
@@ -440,7 +440,7 @@ function displayNameFromEmail(email: string) {
     .split(" ")
     .filter(Boolean);
 
-  if (words.length === 0) return "Usuario MyLyfe";
+  if (words.length === 0) return "Usuario Zelo";
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
@@ -1543,7 +1543,7 @@ function LoadingScreen() {
   return (
     <main className="loading-screen">
       <Mascot mood="think" size="xl" />
-      <span>Carregando MyLyfe</span>
+      <span>Organizando...</span>
     </main>
   );
 }
@@ -1630,7 +1630,7 @@ function AuthScreen({
   return (
     <main className="auth-landing">
       <section className="auth-landing-hero">
-        <BrandLockup title={appName} caption="Modulo financeiro" mood="wave" />
+        <BrandLockup title={appName} caption="Cuide da vida em um so lugar" mood="wave" />
         <div className="auth-landing-stage">
           <span className="auth-blob auth-blob-a" />
           <span className="auth-blob auth-blob-b" />
@@ -1638,12 +1638,11 @@ function AuthScreen({
           <span className="auth-spark auth-spark-a" />
           <span className="auth-spark auth-spark-b" />
           <span className="auth-spark auth-spark-c" />
-          <Mascot className="auth-landing-mascot" mood={mascotMood} size="hero" title="Lyfo te recebe no MyLyfe" />
         </div>
         <div className="auth-landing-copy">
-          <p className="auth-landing-kicker">Oi, eu sou o Lyfo</p>
-          <h1>Vamos entender sua vida financeira</h1>
-          <p>O diagnostico nasce dos seus dados e muda junto com eles.</p>
+          <p className="auth-landing-kicker">Oi. Eu sou o Zelo.</p>
+          <h1>Cuide da vida em um so lugar</h1>
+          <p>Financas, mercado, agenda, lembretes e o que for compartilhado.</p>
         </div>
       </section>
 
@@ -1657,10 +1656,10 @@ function AuthScreen({
         >
           <div className="auth-card-head">
             <div className="auth-card-badge">
-              <Mascot mood={mascotMood} size="sm" title="Lyfo" />
+              <Mascot mood={mascotMood} size="sm" title="Zelo" />
               <span>
                 {inviteMode
-                  ? "Convite MyLyfe"
+                  ? "Convite Zelo"
                   : mode === "login"
                     ? "Bem-vindo de volta"
                     : "Vamos comecar juntos"}
@@ -1867,7 +1866,7 @@ function Onboarding({
         </div>
         {step === 0 && (
           <p className="onboarding-account-note">
-            Voce esta comecando um cadastro novo{session.email ? ` como ${session.email}` : ""}. Se ja tinha uma conta MyLyfe,
+            Voce esta comecando um cadastro novo{session.email ? ` como ${session.email}` : ""}. Se ja tinha uma conta Zelo,
             entre com o mesmo e-mail e senha para recuperar seus dados.
           </p>
         )}
@@ -2437,7 +2436,7 @@ function ProfileView({
   return (
     <div className="page">
       <PageHeader
-        eyebrow="MyLyfe / Conta"
+        eyebrow="Zelo / Conta"
         title="Seu perfil"
         subtitle={
           linked
@@ -2528,7 +2527,7 @@ function Dashboard({
   return (
     <div className="page">
       <PageHeader
-        eyebrow="MyLyfe / Financeiro"
+        eyebrow="Zelo / Financeiro"
         title="Financeiro"
         subtitle="Score, comprometimento de renda e fluxo de caixa recalculados com lancamentos futuros, recorrentes e patrimonio."
       />
@@ -2924,7 +2923,7 @@ function AccessView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<Se
   return (
     <div className="page">
       <PageHeader
-        eyebrow="MyLyfe / Permissoes"
+        eyebrow="Zelo / Permissoes"
         title="Acessos da conta"
         subtitle="Convide pessoas para o Financeiro e, se quiser, compartilhe tambem a lista de mercado."
       />
@@ -3442,7 +3441,7 @@ function InsightList({ title, items, empty, tone }: { title: string; items: stri
 function PlanEditor({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<SetStateAction<FinancePlan | null>> }) {
   return (
     <div className="page">
-      <PageHeader eyebrow="MyLyfe / Financeiro" title="Dados financeiros" subtitle="Tudo que muda aqui recalcula diagnostico e metas do modulo." />
+      <PageHeader eyebrow="Zelo / Financeiro" title="Dados financeiros" subtitle="Tudo que muda aqui recalcula diagnostico e metas do modulo." />
       <div className="editor-grid">
         <ProfileStep plan={plan} setPlan={setPlan} />
         <IncomeEditor plan={plan} setPlan={setPlan} />
@@ -3877,10 +3876,10 @@ function DiagnosticPreview({ plan, analysis }: { plan: FinancePlan; analysis: Fi
         <Mascot mood={mascotMoodFromScore(analysis.score.band)} size="lg" />
         <p>
           {analysis.score.band === "excellent" || analysis.score.band === "healthy"
-            ? "Lyfo gostou do que viu. Seu diagnostico ja tem base para crescer."
+            ? "Boa. Seu cenario ja tem base para crescer."
             : analysis.score.band === "attention" || analysis.score.band === "critical"
-              ? "Lyfo viu pontos de atencao. Vamos ajustar os dados e aliviar a folha."
-              : "Lyfo esta lendo seu cenario. Complete os dados para um diagnostico mais firme."}
+              ? "Ha pontos que pedem atencao. Quer ver o que mudou?"
+              : "Complete os dados para um diagnostico mais firme."}
         </p>
       </div>
       <section className="metric-grid compact">
@@ -4199,7 +4198,7 @@ function CategoriesView({
       <PageHeader
         eyebrow="Financeiro"
         title="Categorias"
-        subtitle="O teto sai da renda menos o aporte. Cada categoria recebe um percentual sugerido, e voce ajusta arrastando o Lyfo."
+        subtitle="O teto sai da renda menos o aporte. Cada categoria recebe um percentual sugerido, e voce ajusta arrastando o Zelo."
       />
 
       <section className="metric-grid compact">
@@ -5071,7 +5070,7 @@ function ImportView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<Se
   return (
     <div className="page">
       <PageHeader
-        eyebrow="MyLyfe / Financeiro"
+        eyebrow="Zelo / Financeiro"
         title="Lancar"
         subtitle="Novo lancamento, importacao de fatura e revisao de pendencias ficam separados. Ao aprovar, o item vai para Transacoes."
       />
@@ -5446,7 +5445,7 @@ function TransactionsView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispa
   return (
     <div className="page">
       <PageHeader
-        eyebrow="MyLyfe / Financeiro"
+        eyebrow="Zelo / Financeiro"
         title="Transacoes"
         subtitle="Consulte o que ja foi aprovado e acompanhe o que ainda segue pendente. Exporte o periodo filtrado quando precisar."
       />
@@ -5648,7 +5647,7 @@ function HistoryView({
 
   return (
     <div className="page">
-      <PageHeader eyebrow="MyLyfe / Financeiro" title="Evolucao" subtitle="Snapshots mensais mostram renda, gastos, aportes e patrimonio ao longo do tempo." />
+      <PageHeader eyebrow="Zelo / Financeiro" title="Evolucao" subtitle="Snapshots mensais mostram renda, gastos, aportes e patrimonio ao longo do tempo." />
       <section className="history-actions">
         <button className="primary-button" onClick={snapshot}>
           <Save size={16} /> Registrar mes atual

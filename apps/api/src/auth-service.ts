@@ -164,7 +164,7 @@ export const registerUser = async (
     }
     const holders = await findPlanPeopleByPhone(repository, phone);
     if (holders.some((item) => item.person.whatsappVerifiedAt && !isSameWhatsappOwner(item, { planId: "", personId: "", email }))) {
-      throw new AuthError("Este WhatsApp ja esta ligado a outra conta MyLyfe.");
+      throw new AuthError("Este WhatsApp ja esta ligado a outra conta Zelo.");
     }
   }
 
@@ -198,7 +198,7 @@ export const loginUser = async (input: { email?: string; password?: string }) =>
   const user = await findUserByEmail(email);
   if (!user) {
     throw new AuthError(
-      "Nao encontramos esta conta. Se voce ja usava o MyLyfe, cadastre de novo com o mesmo e-mail para recuperar seus dados.",
+      "Nao encontramos esta conta. Se voce ja usava o Zelo, cadastre de novo com o mesmo e-mail para recuperar seus dados.",
       401
     );
   }

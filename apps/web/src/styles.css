@@ -4,9 +4,9 @@
 
 :root {
   color-scheme: light;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #f3f5f1;
-  color: #20231f;
+  font-family: "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #F7FAFC;
+  color: #102A4C;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -20,7 +20,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #f3f5f1;
+  background: #F7FAFC;
 }
 
 button,
@@ -48,7 +48,7 @@ button:disabled {
   display: grid;
   place-items: center;
   gap: 12px;
-  color: #596157;
+  color: #5B6B78;
 }
 
 .loading-screen .mascot {
@@ -61,14 +61,14 @@ button:disabled {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: #f3f5f1;
+  background: #F7FAFC;
 }
 
 .auth-landing {
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(360px, 520px);
-  background: #eef1ec;
+  background: #D9F0FA;
 }
 
 .auth-landing-hero {
@@ -103,7 +103,7 @@ button:disabled {
 .auth-blob-a {
   width: min(58vw, 460px);
   height: min(58vw, 460px);
-  background: #d7ecc8;
+  background: #B8DFF0;
   animation: auth-blob-float 8s ease-in-out infinite;
 }
 
@@ -112,7 +112,7 @@ button:disabled {
   height: min(34vw, 260px);
   right: 12%;
   top: 8%;
-  background: #f3d7b3;
+  background: #E5F3FA;
   animation: auth-blob-float 10s ease-in-out infinite reverse;
 }
 
@@ -121,7 +121,7 @@ button:disabled {
   height: min(22vw, 170px);
   left: 10%;
   bottom: 12%;
-  background: #c8e4ef;
+  background: #7EB8D4;
   animation: auth-blob-float 7s ease-in-out infinite 0.6s;
 }
 
@@ -130,7 +130,7 @@ button:disabled {
   width: 10px;
   height: 10px;
   border-radius: 2px;
-  background: #6aa85c;
+  background: #0878F9;
   transform: rotate(20deg);
   pointer-events: none;
   animation: auth-spark-float 4.8s ease-in-out infinite;
@@ -146,7 +146,7 @@ button:disabled {
   right: 20%;
   width: 8px;
   height: 8px;
-  background: #e8b86d;
+  background: #7EB8D4;
   animation-delay: 1.2s;
 }
 
@@ -155,7 +155,7 @@ button:disabled {
   left: 28%;
   width: 7px;
   height: 7px;
-  background: #7eb8c9;
+  background: #7EB8D4;
   animation-delay: 2s;
 }
 
@@ -173,7 +173,7 @@ button:disabled {
 
 .auth-landing-kicker {
   margin: 0 0 8px;
-  color: #3f6b3a;
+  color: #0878F9;
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -189,7 +189,7 @@ button:disabled {
 
 .auth-landing-copy p {
   margin: 0;
-  color: #596157;
+  color: #5B6B78;
   line-height: 1.5;
 }
 
@@ -198,7 +198,7 @@ button:disabled {
   display: grid;
   place-items: center;
   padding: 36px 32px;
-  background: #eef1ec;
+  background: #F7FAFC;
   overflow: hidden;
 }
 
@@ -210,7 +210,7 @@ button:disabled {
   right: -60px;
   top: 12%;
   border-radius: 50%;
-  background: #d7ecc8;
+  background: #D9F0FA;
   filter: blur(12px);
   opacity: 0.55;
   pointer-events: none;
@@ -271,7 +271,7 @@ button:disabled {
   padding: 3px 12px 3px 3px;
   border-radius: 999px;
   background: #e4f0d4;
-  color: #3f6b3a;
+  color: #0878F9;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.01em;
@@ -299,7 +299,7 @@ button:disabled {
 .invite-accept-card p,
 .auth-card p {
   margin: 0;
-  color: #596157;
+  color: #5B6B78;
   line-height: 1.5;
 }
 
@@ -371,12 +371,12 @@ button:disabled {
 }
 
 .auth-mode-toggle button:hover:not(.active) {
-  color: #3f6b3a;
+  color: #0878F9;
 }
 
 .auth-mode-toggle button.active {
   background: #ffffff;
-  color: #3f6b3a;
+  color: #0878F9;
   box-shadow: 0 4px 12px rgba(63, 107, 58, 0.12);
 }
 
@@ -395,16 +395,16 @@ button:disabled {
 
 .auth-landing .auth-card .field input {
   min-height: 50px;
-  border: 1px solid #d5e0cc;
+  border: 1px solid #D5E3EC;
   border-radius: 16px;
-  background: #f4f8ee;
+  background: #E5F3FA;
   padding: 0 14px;
 }
 
 .auth-landing .auth-card .field input:focus {
-  border-color: #6aa85c;
+  border-color: #0878F9;
   background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(106, 168, 92, 0.16);
+  box-shadow: 0 0 0 4px rgba(58, 124, 168, 0.16);
 }
 
 .auth-landing .auth-card .field-input-wrap input {
@@ -418,7 +418,7 @@ button:disabled {
 .auth-submit {
   min-height: 50px;
   border-radius: 16px;
-  background: #3f6b3a;
+  background: #0878F9;
   box-shadow: 0 10px 22px rgba(63, 107, 58, 0.22);
 }
 
@@ -430,7 +430,7 @@ button:disabled {
 .onboarding-switch-link {
   border: 0;
   background: transparent;
-  color: #3f6b3a;
+  color: #0878F9;
   font: inherit;
   font-size: 13px;
   font-weight: 700;
@@ -511,11 +511,13 @@ button:disabled {
 }
 
 .brand-lockup strong {
-  font-size: 15px;
+  font-size: 17px;
+  letter-spacing: -0.04em;
+  color: #1A2430;
 }
 
 .brand-lockup span {
-  color: #aeb8ad;
+  color: #8A97A3;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -570,7 +572,7 @@ button:disabled {
 
 .diagnostic-buddy p {
   margin: 0;
-  color: #596157;
+  color: #5B6B78;
   line-height: 1.5;
 }
 
@@ -830,7 +832,7 @@ button:disabled {
 }
 
 .page-header span {
-  color: #0f766e;
+  color: #0878F9;
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
@@ -845,7 +847,7 @@ button:disabled {
 
 .page-header p {
   margin: 0;
-  color: #596157;
+  color: #5B6B78;
   line-height: 1.55;
 }
 
@@ -904,7 +906,7 @@ button:disabled {
   height: 36px;
   border-radius: 8px;
   background: #edf5e6;
-  color: #0f766e;
+  color: #0878F9;
 }
 
 .metric-card span {
@@ -939,7 +941,7 @@ button:disabled {
 
 .metric-card.tone-good div {
   background: #e6f4ef;
-  color: #0f766e;
+  color: #0878F9;
 }
 
 .metric-card.tone-warn div {
@@ -1057,7 +1059,7 @@ button:disabled {
 
 .commitment-hero > div:first-child > span,
 .commitment-hero-heading span {
-  color: #0f766e;
+  color: #0878F9;
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
@@ -1128,7 +1130,7 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #596157;
+  color: #5B6B78;
   font-size: 12px;
 }
 
@@ -1208,12 +1210,12 @@ button:disabled {
 .score-hero em {
   font-style: normal;
   font-weight: 800;
-  color: #0f766e;
+  color: #0878F9;
 }
 
 .score-ring {
   --score: 0%;
-  --ring: #0f766e;
+  --ring: #0878F9;
   display: grid;
   place-items: center;
   align-content: center;
@@ -1227,7 +1229,7 @@ button:disabled {
 
 .score-ring.band-excellent,
 .score-ring.band-healthy {
-  --ring: #0f766e;
+  --ring: #0878F9;
 }
 
 .score-ring.band-balanced {
@@ -1304,7 +1306,7 @@ button:disabled {
 .progress-track div {
   height: 100%;
   border-radius: inherit;
-  background: #0f766e;
+  background: #0878F9;
 }
 
 .bar-track div.warn {
@@ -1417,7 +1419,7 @@ button.module-overview-card:hover {
 }
 
 .insight-list.strong {
-  border-left: 4px solid #0f766e;
+  border-left: 4px solid #0878F9;
 }
 
 .insight-list.attention {
@@ -1468,7 +1470,7 @@ button.module-overview-card:hover {
   border: 1px solid #cfd8ce;
   border-radius: 8px;
   background: #fbfcfa;
-  color: #20231f;
+  color: #1A2430;
   padding: 0 11px;
   outline: none;
 }
@@ -1513,7 +1515,7 @@ button.module-overview-card:hover {
 .field input:focus,
 .field select:focus,
 .select-trigger:focus-visible {
-  border-color: #0f766e;
+  border-color: #0878F9;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
@@ -1544,7 +1546,7 @@ button.module-overview-card:hover {
 
 .field-reveal:hover,
 .field-reveal:focus-visible {
-  color: #20231f;
+  color: #1A2430;
   background: rgba(32, 35, 31, 0.06);
   outline: none;
 }
@@ -1579,7 +1581,7 @@ button.module-overview-card:hover {
 }
 
 .select-trigger[aria-expanded="true"] {
-  border-color: #0f766e;
+  border-color: #0878F9;
   background: #ffffff;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
 }
@@ -1631,7 +1633,7 @@ button.module-overview-card:hover {
   border: 1px solid #dfe4dc;
   border-radius: 999px;
   background: #ffffff;
-  color: #20231f;
+  color: #1A2430;
   font-size: 12px;
   font-weight: 800;
   overflow: hidden;
@@ -1695,7 +1697,7 @@ button.module-overview-card:hover {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #20231f;
+  color: #1A2430;
   text-align: left;
 }
 
@@ -1719,7 +1721,7 @@ button.module-overview-card:hover {
 .toggle-field input {
   width: 18px;
   height: 18px;
-  accent-color: #0f766e;
+  accent-color: #0878F9;
 }
 
 .toggle-field.has-hint {
@@ -1756,7 +1758,7 @@ button.module-overview-card:hover {
 }
 
 .home-share-chip.active {
-  border-color: #0f766e;
+  border-color: #0878F9;
   background: #e6f4ef;
   color: #0b5f59;
 }
@@ -1791,7 +1793,7 @@ button.module-overview-card:hover {
 
 .range-field input {
   width: 100%;
-  accent-color: #0f766e;
+  accent-color: #0878F9;
 }
 
 .item-list,
@@ -1830,7 +1832,7 @@ button.module-overview-card:hover {
 .panel-link {
   border: 0;
   background: transparent;
-  color: #0f766e;
+  color: #0878F9;
   font-weight: 800;
   padding: 0;
 }
@@ -1872,7 +1874,7 @@ button.module-overview-card:hover {
   height: 44px;
   border-radius: 999px;
   background: #eef1eb;
-  color: #596157;
+  color: #5B6B78;
 }
 
 .category-mobile-row span:nth-child(2) {
@@ -1882,7 +1884,7 @@ button.module-overview-card:hover {
 }
 
 .category-mobile-row strong {
-  color: #20231f;
+  color: #1A2430;
   font-size: 15px;
   font-weight: 600;
 }
@@ -2058,7 +2060,7 @@ button.module-overview-card:hover {
 }
 
 .recurring-item strong {
-  color: #20231f;
+  color: #1A2430;
 }
 
 .recurring-item span {
@@ -2120,7 +2122,7 @@ button.module-overview-card:hover {
   border: 1px solid #dfe4dc;
   border-radius: 999px;
   background: #ffffff;
-  color: #20231f;
+  color: #1A2430;
   font-size: 12px;
   font-weight: 800;
 }
@@ -2199,7 +2201,7 @@ button.module-overview-card:hover {
   display: block;
   max-width: 100%;
   overflow: hidden;
-  color: #0f766e;
+  color: #0878F9;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2245,7 +2247,7 @@ button.module-overview-card:hover {
 .category-grid button.active,
 .asset-share-field button.active,
 .scope-selector button.active {
-  border-color: #0f766e;
+  border-color: #0878F9;
   background: #e6f4ef;
   color: #0b5f59;
 }
@@ -2288,7 +2290,7 @@ button.module-overview-card:hover {
 
 .primary-button {
   border: 0;
-  background: #18221c;
+  background: #0878F9;
   color: #ffffff;
   padding: 0 16px;
 }
@@ -2363,7 +2365,7 @@ button.module-overview-card:hover {
 }
 
 .file-drop strong {
-  color: #20231f;
+  color: #1A2430;
 }
 
 .file-drop span {
@@ -2378,7 +2380,7 @@ button.module-overview-card:hover {
 .form-note {
   grid-column: 1 / -1;
   margin: 0;
-  color: #596157;
+  color: #5B6B78;
 }
 
 .form-note.warn {
@@ -2400,7 +2402,7 @@ button.module-overview-card:hover {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  color: #596157;
+  color: #5B6B78;
 }
 
 .statement-summary strong,
@@ -2413,7 +2415,7 @@ button.module-overview-card:hover {
 }
 
 .statement-summary strong {
-  color: #20231f;
+  color: #1A2430;
 }
 
 .transaction-table,
@@ -2429,7 +2431,7 @@ button.module-overview-card:hover {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
-  color: #596157;
+  color: #5B6B78;
   font-size: 13px;
   font-weight: 700;
 }
@@ -2513,7 +2515,7 @@ button.module-overview-card:hover {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #596157;
+  color: #5B6B78;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -2588,7 +2590,7 @@ button.module-overview-card:hover {
 
 .transaction-action-button:hover {
   border-color: #aebcad;
-  color: #20231f;
+  color: #1A2430;
   background: #ffffff;
 }
 
@@ -2606,7 +2608,7 @@ button.module-overview-card:hover {
 }
 
 .transaction-action-menu > strong {
-  color: #20231f;
+  color: #1A2430;
   font-size: 13px;
 }
 
@@ -2746,7 +2748,7 @@ button.module-overview-card:hover {
 }
 
 .decision-result.ok {
-  border-left: 4px solid #0f766e;
+  border-left: 4px solid #0878F9;
 }
 
 .decision-result.warn {
@@ -2768,7 +2770,7 @@ button.module-overview-card:hover {
   gap: 12px;
   flex-wrap: wrap;
   padding: 8px 2px 2px;
-  color: #596157;
+  color: #5B6B78;
   font-size: 13px;
   font-weight: 700;
 }
@@ -2788,7 +2790,7 @@ button.module-overview-card:hover {
 }
 
 .review-row > span {
-  color: #596157;
+  color: #5B6B78;
 }
 
 .risk-grid {
@@ -2982,78 +2984,101 @@ button.module-overview-card:hover {
 .mascot {
   display: block;
   overflow: visible;
+  object-fit: contain;
+  background: transparent;
 }
 
 .mascot--sm {
-  width: 46px;
-  height: 54px;
+  width: 52px;
+  height: 58px;
 }
 
 .mascot--md {
-  width: 72px;
-  height: 84px;
+  width: 84px;
+  height: 94px;
 }
 
 .mascot--lg {
-  width: 96px;
-  height: 112px;
+  width: 112px;
+  height: 126px;
 }
 
 .mascot--xl {
-  width: 132px;
-  height: 154px;
+  width: 148px;
+  height: 166px;
 }
 
 .mascot--hero {
-  width: min(46vw, 360px);
+  width: min(52vw, 380px);
   height: auto;
-  aspect-ratio: 80 / 96;
+  aspect-ratio: 1;
 }
 
 .mascot-shadow {
-  fill: #1d2420;
-  opacity: 0.14;
-}
-
-.mascot-sprout rect {
-  fill: #3d6b38;
+  fill: #1C2C4A;
+  opacity: 0.12;
 }
 
 .mascot-leaf-left {
-  fill: #4f8a45;
+  fill: #2DB85A;
 }
 
 .mascot-leaf-right {
-  fill: #6aa85c;
+  fill: #37C978;
 }
 
-.mascot-arm,
-.mascot-leg {
+.mascot-arm {
   fill: none;
-  stroke: #8fbe74;
+  stroke: #0878F9;
   stroke-width: 7;
   stroke-linecap: round;
 }
 
-.mascot-body > ellipse:first-child {
-  fill: #9ec87a;
+.mascot-hand,
+.mascot-sole {
+  fill: #F4F7FB;
 }
 
-.mascot-belly {
-  fill: #eaf4dc;
+.mascot-hoodie,
+.mascot-shoe {
+  fill: #0878F9;
 }
 
-.mascot-badge {
-  fill: #4f8a45;
+.mascot-hood {
+  fill: none;
+  stroke: #2458E0;
+  stroke-width: 3.2;
+  stroke-linecap: round;
 }
 
-.mascot-cheek {
-  fill: #efb8a6;
-  opacity: 0.82;
+.mascot-hood-light {
+  fill: none;
+  stroke: #4C84FF;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.mascot-strap {
+  fill: none;
+  stroke: #2A3344;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+}
+
+.mascot-head {
+  fill: #ffffff;
+}
+
+.mascot-z {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .mascot-eyes ellipse {
-  fill: #1d2420;
+  fill: #1C2C4A;
 }
 
 .mascot-glint {
@@ -3065,37 +3090,39 @@ button.module-overview-card:hover {
 }
 
 .mascot-lids rect {
-  fill: #9ec87a;
+  fill: #ffffff;
 }
 
 .mascot-brow {
   fill: none;
-  stroke: #1d2420;
-  stroke-width: 1.7;
+  stroke: #1C2C4A;
+  stroke-width: 1.8;
   stroke-linecap: round;
 }
 
-.mascot-mouth-smile,
 .mascot-mouth-sad,
 .mascot-mouth-flat {
   fill: none;
-  stroke: #1d2420;
-  stroke-width: 1.9;
+  stroke: #1C2C4A;
+  stroke-width: 1.8;
   stroke-linecap: round;
 }
 
 .mascot-mouth-o {
-  fill: #1d2420;
+  fill: #1C2C4A;
 }
 
-.mascot-mouth-o,
+.mascot-tongue {
+  fill: #F4A7B9;
+}
+
 .mascot-mouth-sad,
 .mascot-mouth-flat {
   opacity: 0;
 }
 
 .mascot-sparkles {
-  fill: #e8c86a;
+  fill: #37C978;
   opacity: 0;
 }
 
@@ -3105,19 +3132,17 @@ button.module-overview-card:hover {
 }
 
 .mascot-paper {
-  opacity: 0;
+  opacity: 1;
 }
 
 .mascot-paper rect {
-  fill: #f7fbf3;
-  stroke: #8f9b8d;
-  stroke-width: 1.2;
+  fill: #2A3344;
 }
 
 .mascot-paper path {
   fill: none;
-  stroke: #8f9b8d;
-  stroke-width: 1.2;
+  stroke: #8A97B0;
+  stroke-width: 0.7;
   stroke-linecap: round;
 }
 
@@ -3164,9 +3189,9 @@ button.module-overview-card:hover {
   animation: mascot-blink 4.4s ease-in-out infinite;
 }
 
-.mascot--idle .mascot-sprout,
-.mascot--wave .mascot-sprout,
-.mascot--think .mascot-sprout {
+.mascot--idle .mascot-leaf,
+.mascot--wave .mascot-leaf,
+.mascot--think .mascot-leaf {
   animation: mascot-sprout-sway 3.6s ease-in-out infinite;
 }
 
@@ -3188,11 +3213,12 @@ button.module-overview-card:hover {
   animation: mascot-look-up 1.8s ease-in-out infinite;
 }
 
-.mascot--think .mascot-mouth-smile {
+.mascot--think .mascot-mouth-o,
+.mascot--think .mascot-tongue {
   opacity: 0;
 }
 
-.mascot--think .mascot-mouth-o {
+.mascot--think .mascot-mouth-flat {
   opacity: 1;
 }
 
@@ -3231,7 +3257,8 @@ button.module-overview-card:hover {
   transform: translate(-0.6px, 1.4px) rotate(-16deg);
 }
 
-.mascot--worry .mascot-mouth-smile {
+.mascot--worry .mascot-mouth-o,
+.mascot--worry .mascot-tongue {
   opacity: 0;
 }
 
@@ -3247,11 +3274,12 @@ button.module-overview-card:hover {
   animation: mascot-look-around 2.4s ease-in-out infinite;
 }
 
-.mascot--search .mascot-mouth-smile {
+.mascot--search .mascot-mouth-o,
+.mascot--search .mascot-tongue {
   opacity: 0;
 }
 
-.mascot--search .mascot-mouth-o {
+.mascot--search .mascot-mouth-flat {
   opacity: 1;
 }
 
@@ -3268,7 +3296,8 @@ button.module-overview-card:hover {
   animation: mascot-work-arm 0.9s ease-in-out infinite;
 }
 
-.mascot--work .mascot-mouth-smile {
+.mascot--work .mascot-mouth-o,
+.mascot--work .mascot-tongue {
   opacity: 0;
 }
 
@@ -3567,7 +3596,7 @@ button.module-overview-card:hover {
   border: 1px solid #cfd8ce;
   border-radius: 8px;
   background: #fbfcfa;
-  color: #20231f;
+  color: #1A2430;
   padding: 0 11px;
 }
 
@@ -3577,9 +3606,9 @@ button.module-overview-card:hover {
 
 .routine-filters .secondary-button.active,
 .icon-button.active {
-  border-color: #0f766e;
+  border-color: #0878F9;
   background: #edf5e6;
-  color: #0f766e;
+  color: #0878F9;
 }
 
 .routine-color-dot {
@@ -3883,7 +3912,7 @@ button.module-overview-card:hover {
 }
 
 .routine-month-day.today strong {
-  background: #18221c;
+  background: #0878F9;
   color: #ffffff;
 }
 
@@ -3966,7 +3995,7 @@ button.module-overview-card:hover {
 }
 
 .routine-week-head.today strong {
-  background: #18221c;
+  background: #0878F9;
   color: #ffffff;
 }
 

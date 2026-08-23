@@ -1,8 +1,8 @@
-# MyLyfe Modular Life OS
+# Zelo Modular Life OS
 
 ## 1. Proposta De Valor
 
-MyLyfe e um sistema operacional pessoal modular para administrar melhor a vida. Os primeiros modulos ativos sao o Financeiro, que transforma dados em diagnostico e plano, e a Secretaria, que cobra prazos e contas pelo WhatsApp.
+Zelo e um sistema operacional pessoal modular para administrar melhor a vida. Os primeiros modulos ativos sao o Financeiro, que transforma dados em diagnostico e plano, e a Secretaria, que cobra prazos e contas pelo WhatsApp.
 
 O produto nasce preparado para varios modulos dentro do mesmo workspace. Hoje estao ativos o Financeiro e a Secretaria. Rotina, Saude, Casa e Projetos continuam no catalogo como planejados. Cada modulo podera ter pessoas convidadas, papeis e permissoes especificas por area.
 
@@ -24,7 +24,7 @@ O primeiro acesso tem fluxo de consultoria:
 
 ## 3. Modelo De Dados
 
-O MVP usa um workspace MyLyfe por usuario, com um documento financeiro como modulo ativo:
+O MVP usa um workspace Zelo por usuario, com um documento financeiro como modulo ativo:
 
 - `workspace`: nome do espaco, dono e catalogo de modulos disponiveis ou planejados.
 - `profile`: dados pessoais, familia e regras de compartilhamento.
@@ -130,7 +130,7 @@ O MVP aceita importacao de fatura/extrato por CSV e prepara o fluxo para PDF. A 
 
 MVP:
 
-- workspace MyLyfe com catalogo de modulos;
+- workspace Zelo com catalogo de modulos;
 - Financeiro e Secretaria como modulos ativos e independentes;
 - Secretaria com WhatsApp, lembretes, preferencias e confirmacao de pagamento;
 - onboarding em etapas;

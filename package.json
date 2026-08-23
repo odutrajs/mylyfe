@@ -9,14 +9,22 @@
   ],
   "scripts": {
     "dev": "npm run build -w @mylyfe/domain && concurrently -n api,web -c green,cyan \"npm run dev -w @mylyfe/api\" \"npm run dev -w @mylyfe/web\"",
+    "dev:mobile": "npm run build -w @mylyfe/domain && npm start -w @mylyfe/mobile",
+    "build:ios": "npm run build -w @mylyfe/domain && npm run build:ios -w @mylyfe/mobile",
+    "submit:ios": "npm run submit:ios -w @mylyfe/mobile",
     "build": "npm run build -w @mylyfe/domain && npm run build -w @mylyfe/api && npm run build -w @mylyfe/web",
     "test": "npm run test -w @mylyfe/domain",
-    "typecheck": "npm run typecheck -w @mylyfe/domain && npm run build -w @mylyfe/domain && npm run typecheck -w @mylyfe/api && npm run typecheck -w @mylyfe/web && npm run typecheck -w @mylyfe/secretary",
+    "typecheck": "npm run typecheck -w @mylyfe/domain && npm run build -w @mylyfe/domain && npm run typecheck -w @mylyfe/api && npm run typecheck -w @mylyfe/web && npm run typecheck -w @mylyfe/secretary && npm run typecheck -w @mylyfe/mobile",
     "secretary": "npm run dev -w @mylyfe/secretary"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "react-native-reanimated": "4.5.1",
+    "react-native-worklets": "0.10.1",
+    "react-native-gesture-handler": "2.32.0"
   }
 }

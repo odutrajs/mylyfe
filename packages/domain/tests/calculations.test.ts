@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   analyzePlan,
   calculateCategoryBudgetProgress,
+  listCategoryExpensesInMonth,
   calculateEmergencyFundMonths,
   calculateFinancialIndependenceNumber,
   calculateGoalCurrentValue,
   calculateGoalProjection,
   calculateIncomeCommitment,
   calculateIncomeMetrics,
+  calculateMonthlyCashFlow,
+  calculateMonthlyCashFlowSeries,
   calculateNominalReturn,
   calculatePatrimonyMetrics,
   calculateSavingsRate,
@@ -753,6 +756,59 @@ describe("financial domain calculations", () => {
     expect(food?.status).toBe("comfortable");
   });
 
+  it("lists the current-month expenses that make up a category total", () => {
+    const plan = {
+      ...basePlan(),
+      transactions: [
+        {
+          id: "padaria",
+          date: "2026-08-10T00:00:00.000Z",
+          merchant: "Padaria Central",
+          amount: 42.5,
+          type: "expense",
+          audience: "personal",
+          nature: "variable",
+          category: "food",
+          confidence: 1,
+          source: "manual",
+          reviewed: true
+        },
+        {
+          id: "uber",
+          date: "2026-08-12T00:00:00.000Z",
+          merchant: "Uber",
+          amount: 28,
+          type: "expense",
+          audience: "personal",
+          nature: "variable",
+          category: "transport",
+          confidence: 1,
+          source: "manual",
+          reviewed: true
+        }
+      ],
+      recurringTransactions: [
+        {
+          id: "ifood",
+          name: "Ifood clube",
+          amount: 14.9,
+          type: "expense",
+          audience: "personal",
+          nature: "recurring",
+          category: "food",
+          frequency: "monthly",
+          startDate: "2026-01-05",
+          reviewed: true
+        }
+      ]
+    } satisfies FinancePlan;
+
+    const items = listCategoryExpensesInMonth(plan, "2026-08", "food");
+
+    expect(items.map((item) => item.name)).toEqual(["Padaria Central", "Ifood clube"]);
+    expect(items.reduce((sum, item) => sum + item.amount, 0)).toBeCloseTo(57.4);
+  });
+
   it("suggests category ceilings from income minus the planned contribution", () => {
     const plan = {
       ...basePlan(),
@@ -853,5 +909,45 @@ describe("financial domain calculations", () => {
     expect(shopping?.name).toBe("Compras e Lazer");
     expect(shopping?.spent).toBe(150);
     expect(shopping?.share).toBe(0.09);
+  });
+
+  it("builds a monthly cash flow series with income, outflow and net", () => {
+    const plan = {
+      ...basePlan(),
+      incomeSources: [
+        {
+          id: "salary",
+          name: "Salary",
+          type: "clt",
+          netAmount: 10000,
+          frequency: "monthly",
+          isRecurring: true,
+          stabilityScore: 8
+        }
+      ],
+      transactions: [
+        {
+          id: "rent",
+          date: "2026-08-05",
+          merchant: "Aluguel",
+          amount: 2500,
+          type: "expense",
+          audience: "personal",
+          nature: "essential",
+          category: "housing",
+          confidence: 1,
+          source: "manual",
+          reviewed: true
+        }
+      ]
+    } satisfies FinancePlan;
+
+    const flow = calculateMonthlyCashFlow(plan, "2026-08");
+    expect(flow.income).toBe(10000);
+    expect(flow.outflow).toBeGreaterThanOrEqual(2500);
+    expect(flow.net).toBe(flow.income - flow.outflow);
+
+    const series = calculateMonthlyCashFlowSeries(plan, new Date("2026-08-15T12:00:00.000Z"), 1, 1);
+    expect(series.map((item) => item.month)).toEqual(["2026-07", "2026-08", "2026-09"]);
   });
 });

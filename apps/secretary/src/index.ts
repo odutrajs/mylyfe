@@ -322,7 +322,7 @@ const startSocket = async () => {
     printQRInTerminal: false,
     markOnlineOnConnect: false,
     syncFullHistory: false,
-    browser: ["MyLyfe Secretaria", "Chrome", "1.0"],
+    browser: ["Zelo Secretaria", "Chrome", "1.0"],
     getMessage: async () => ({ conversation: "" })
   });
 
@@ -470,7 +470,7 @@ app.post("/send", requireToken, async (request, response) => {
 });
 
 app.listen(port, () => {
-  console.log(`MyLyfe secretary running on http://localhost:${port}`);
+  console.log(`Zelo secretary running on http://localhost:${port}`);
   startSocket().catch((error) => {
     lastError = error instanceof Error ? error.message : "Falha ao iniciar o WhatsApp.";
     logger.error({ err: error }, "failed to start baileys");

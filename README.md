@@ -1,4 +1,4 @@
-# MyLyfe
+# Zelo
 
 Aplicacao web para administrar areas da vida em modulos. O primeiro modulo ativo e o Financeiro, com planejamento pessoal e patrimonial, frontend React e backend Node separados.
 
@@ -11,6 +11,23 @@ npm run dev
 
 - Web: http://localhost:5173
 - API: http://localhost:3333/api
+
+App mobile (Expo, mesma conta da API de producao em `https://feedeo.com.br/api`):
+
+```bash
+npm run dev:mobile
+```
+
+Para apontar para a API local, use `EXPO_PUBLIC_API_URL=http://localhost:3333/api` em `apps/mobile/.env`.
+
+Build iOS (EAS, conta `@vendepay/mylyfe`):
+
+```bash
+npm run build:ios
+npm run submit:ios
+```
+
+Antes do envio: publique `privacidade.html` e `termos.html` em `https://feedeo.com.br` e preencha a ficha do app no App Store Connect.
 
 Como a porta `5173` pode estar ocupada por outro projeto local, rode o frontend em `5174` quando necessario:
 
@@ -57,7 +74,7 @@ npm run build
 - `apps/web`: React, TypeScript, Tailwind e Recharts.
 - `apps/api`: Node, Express, importacao CSV/PDF, persistencia e motor dos alertas.
 - `apps/secretary`: gateway WhatsApp com Baileys, isolado em container.
-- `packages/domain`: modelo do workspace MyLyfe, modulo financeiro, formulas, classificacao, simuladores e conversa da secretaria.
+- `packages/domain`: modelo do workspace Zelo, modulo financeiro, formulas, classificacao, simuladores e conversa da secretaria.
 - `docs/PRODUCT_PLAN.md`: proposta, onboarding, modelo, regras e roadmap.
 
 ## Modulos E Acessos

@@ -406,7 +406,7 @@ export const finishGoogleConnect = async (repository: PlanRepository, code: stri
   if (!state) throw new RoutineError("Estado OAuth invalido ou expirado.", 400);
   const tokens = await exchangeGoogleCode(code);
   if (!tokens.refresh_token) {
-    throw new RoutineError("O Google nao devolveu refresh token. Revogue o acesso do MyLyfe e vincule de novo.", 400);
+    throw new RoutineError("O Google nao devolveu refresh token. Revogue o acesso do Zelo e vincule de novo.", 400);
   }
 
   const email = await googleEmail(tokens.access_token);

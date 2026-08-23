@@ -245,7 +245,7 @@ export function HealthView({
 
   const header = (title: string, copy: string) => (
     <header className="page-header">
-      <span>MyLyfe / Saude</span>
+      <span>Zelo / Saude</span>
       <h1>{title}</h1>
       <p>{copy}</p>
     </header>

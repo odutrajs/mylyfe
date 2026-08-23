@@ -1,6 +1,6 @@
 import { isShoppingSector, shoppingSectors, type SecretaryIntent, type ShoppingSector } from "@mylyfe/domain";
 
-const systemPrompt = `Voce e a secretaria do MyLyfe. Leia a mensagem do usuario em portugues e devolva SOMENTE um JSON:
+const systemPrompt = `Voce e o Zelo, secretaria da vida do usuario. Leia a mensagem em portugues e devolva SOMENTE um JSON:
 {"intents":[ ... ]}
 
 Tipos de intent:

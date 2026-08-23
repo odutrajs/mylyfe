@@ -108,7 +108,7 @@ export function HomeView({
   return (
     <div className="page">
       <header className="page-header">
-        <span>MyLyfe / Casa</span>
+        <span>Zelo / Casa</span>
         <h1>Mercado</h1>
         <p>
           {sharedNames.length

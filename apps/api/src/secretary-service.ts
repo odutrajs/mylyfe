@@ -242,7 +242,7 @@ const heardReply = (text: string, reply: string, via?: string) =>
   via === "audio" && reply ? `Ouvi: *${text}*\n\n${reply}` : reply;
 
 const unknownPhoneReply =
-  "Nao te reconheci neste WhatsApp. Entra no MyLyfe, cadastra este numero em Secretaria > Preferencias e confirma o codigo que eu mandar.";
+  "Nao te reconheci neste WhatsApp. Entra no Zelo, cadastra este numero em Secretaria > Preferencias e confirma o codigo que eu mandar.";
 
 export const handleSecretaryInbox = async (
   repository: PlanRepository,
@@ -276,7 +276,7 @@ export const handleSecretaryInbox = async (
   const { plan, person } = matched;
   if (!person.whatsappVerifiedAt) {
     const reply =
-      "Recebi sua mensagem, mas este WhatsApp ainda nao foi confirmado. Entra no MyLyfe, pede o codigo em Secretaria > Preferencias e me manda os 6 digitos.";
+      "Recebi sua mensagem, mas este WhatsApp ainda nao foi confirmado. Entra no Zelo, pede o codigo em Secretaria > Preferencias e me manda os 6 digitos.";
     const jobs = toJobs(plan.id, phone, [{ text: reply, kind: "ack" }], true);
     await enqueueJobs(jobs);
     return { planId: plan.id, state: plan.secretary, reply, jobs, matchedAlertId: undefined };

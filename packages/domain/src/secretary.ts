@@ -758,7 +758,7 @@ export const applyInbox = (
   if (!matched) {
     return {
       alerts,
-      reply: `Oi! Sou a secretaria do MyLyfe. Cadastre um alerta no app e eu te cobro por aqui. Se quiser, manda *pendencias*.`
+      reply: `Oi. Sou o Zelo. Cadastre um alerta no app e eu te cobro por aqui. Se quiser, manda *pendencias*.`
     };
   }
 
