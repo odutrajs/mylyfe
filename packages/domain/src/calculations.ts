@@ -7,6 +7,7 @@ import type {
   CategoryBudgetProgress,
   CategoryBudgetSource,
   CategoryBudgetStatus,
+  CategoryExpenseItem,
   CommitmentStatus,
   Debt,
   ExpenseCategory,
@@ -22,6 +23,7 @@ import type {
   IndependenceScenario,
   InvestmentCapacity,
   MonthCommitment,
+  MonthlyCashFlow,
   PatrimonyMetrics,
   PurchaseSimulation,
   RecurringTransaction,
@@ -402,7 +404,7 @@ export const calculateSpendingMetrics = (plan: FinancePlan, asOf = new Date()): 
 export const calculateMonthlyDebtPayments = (debts: Debt[]) =>
   roundMoney(debts.reduce((sum, debt) => sum + positive(debt.monthlyPayment), 0));
 
-const dateFromMonthKey = (key: string) => {
+export const dateFromMonthKey = (key: string) => {
   const [year, month] = key.split("-").map(Number);
   return new Date(year ?? 1970, (month ?? 1) - 1, 15, 12, 0, 0, 0);
 };
@@ -547,6 +549,32 @@ export const calculateCashFlowSnapshot = (plan: FinancePlan, asOf = new Date()):
   };
 };
 
+export const formatMonthKey = (date: Date) => monthKey(date);
+
+export const monthKeyFromOffset = (asOf: Date, offset: number) => shiftMonthKey(asOf, offset);
+
+export const calculateMonthlyCashFlow = (plan: FinancePlan, month: string): MonthlyCashFlow => {
+  const asOf = dateFromMonthKey(month);
+  const recurringIncome = calculateIncomeMetrics(plan, asOf).recurringMonthly;
+  const extraIncome = plan.transactions
+    .filter((transaction) => spendingMonthKey(transaction) === month && transaction.type === "income" && transaction.nature === "extraordinary")
+    .reduce((sum, transaction) => sum + Math.abs(finite(transaction.amount)), 0);
+  const snapshot = calculateCashFlowSnapshot(plan, asOf);
+  const income = roundMoney(recurringIncome + extraIncome);
+  const outflow = roundMoney(snapshot.recurring + snapshot.installments + snapshot.variable + calculateMonthlyDebtPayments(plan.debts));
+  return {
+    month,
+    income,
+    outflow,
+    net: roundMoney(income - outflow)
+  };
+};
+
+export const calculateMonthlyCashFlowSeries = (plan: FinancePlan, asOf = new Date(), pastMonths = 5, futureMonths = 6) =>
+  Array.from({ length: pastMonths + futureMonths + 1 }, (_, index) =>
+    calculateMonthlyCashFlow(plan, shiftMonthKey(asOf, index - pastMonths))
+  );
+
 const ignoredBudgetCategories = new Set(["investments", "company", "thirdParty"]);
 
 export const DASHBOARD_CATEGORY_LIMIT = 5;
@@ -605,16 +633,42 @@ const categoryBudgetStatus = (usedPercent: number | null, remaining: number | nu
   return "comfortable";
 };
 
-export const calculateCategorySpendInMonth = (plan: FinancePlan, month: string, category: ExpenseCategory) => {
-  const imported = plan.transactions
+export const listCategoryExpensesInMonth = (
+  plan: FinancePlan,
+  month: string,
+  category: ExpenseCategory
+): CategoryExpenseItem[] => {
+  const unified = unifyShoppingCategories(plan);
+  const asOf = dateFromMonthKey(month);
+
+  const imported = unified.transactions
     .filter((transaction) => spendingMonthKey(transaction) === month && transaction.category === category && isPersonalExpense(transaction))
-    .reduce((sum, transaction) => sum + Math.abs(finite(transaction.amount)), 0);
-  const recurring = calculateRecurringCurrentMonthAmount(
-    plan.recurringTransactions ?? [],
-    dateFromMonthKey(month),
-    (transaction) => isPersonalRecurringExpense(transaction) && transaction.category === category
-  );
-  const forecasts = plan.transactions
+    .map((transaction) => ({
+      id: transaction.id,
+      name: transaction.merchant,
+      amount: Math.abs(finite(transaction.amount)),
+      date: transaction.date,
+      kind: "transaction" as const,
+      installment: transaction.installment
+    }));
+
+  const recurring = (unified.recurringTransactions ?? [])
+    .filter((transaction) => isPersonalRecurringExpense(transaction) && transaction.category === category && recursInMonth(transaction, asOf))
+    .map((transaction) => {
+      const monthlyFactor =
+        transaction.frequency === "weekly" || transaction.frequency === "biweekly"
+          ? recurringFrequencyToMonthlyFactor(transaction)
+          : 1;
+      return {
+        id: `rec-${transaction.id}`,
+        name: transaction.name,
+        amount: positive(transaction.amount) * monthlyFactor,
+        date: transaction.startDate,
+        kind: "recurring" as const
+      };
+    });
+
+  const forecasts = unified.transactions
     .filter(
       (transaction) =>
         spendingMonthKey(transaction) === month &&
@@ -622,10 +676,20 @@ export const calculateCategorySpendInMonth = (plan: FinancePlan, month: string, 
         isForecastTransaction(transaction) &&
         isPersonalOutflow(transaction)
     )
-    .reduce((sum, transaction) => sum + Math.abs(finite(transaction.amount)), 0);
+    .map((transaction) => ({
+      id: transaction.id,
+      name: transaction.merchant,
+      amount: Math.abs(finite(transaction.amount)),
+      date: transaction.date,
+      kind: "forecast" as const,
+      installment: transaction.installment
+    }));
 
-  return roundMoney(imported + recurring + forecasts);
+  return [...imported, ...recurring, ...forecasts].sort((left, right) => (right.date ?? "").localeCompare(left.date ?? "") || right.amount - left.amount);
 };
+
+export const calculateCategorySpendInMonth = (plan: FinancePlan, month: string, category: ExpenseCategory) =>
+  roundMoney(listCategoryExpensesInMonth(plan, month, category).reduce((sum, item) => sum + item.amount, 0));
 
 export const calculateCategoryBudgetProgress = (plan: FinancePlan, asOf = new Date()): CategoryBudgetProgress[] => {
   const unified = unifyShoppingCategories(plan);

@@ -85,7 +85,7 @@ export const defaultWorkspaceModules = (): WorkspaceModule[] => [
 
 export const defaultLifeWorkspace = (id = "primary", ownerPersonId = "primary"): LifeWorkspace => ({
   id,
-  name: "MyLyfe",
+  name: "Zelo",
   ownerPersonId,
   modules: defaultWorkspaceModules()
 });

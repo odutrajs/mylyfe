@@ -715,7 +715,7 @@ const formatBookedReply = (parsed: ParsedAgendaCommand, timezone: string) => {
       : `*${span || "na agenda"} as ${parsed.time}*, ${parsed.dates.length} horarios, de *${formatDayMonth(firstIso, timezone)}* a *${formatDayMonth(lastIso, timezone)}*`;
   const remind =
     parsed.dates.length > 2
-      ? " Coloquei na agenda do MyLyfe. Se quiser aviso no WhatsApp em cada dia, me fala."
+      ? " Coloquei na agenda do Zelo. Se quiser aviso no WhatsApp em cada dia, me fala."
       : parsed.destination === "routine"
         ? " Te aviso 15 minutos antes."
         : " Vou lembrar na vespera, 3h e 1h antes.";

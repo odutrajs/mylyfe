@@ -1,0 +1,21 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="650" height="650" viewBox="0 0 650 650" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Central Emblem">
+<g id="Z Halo" opacity="0.25" filter="url(#filter0_f_0_4)">
+<circle cx="325" cy="325" r="200" fill="white"/>
+</g>
+<g id="Z Lettermark">
+<rect id="Z Top Bar" x="147" y="117.452" width="340" height="96" rx="48" fill="white"/>
+<rect id="Z Bottom Bar" x="160" y="435.452" width="340" height="96" rx="48" fill="white"/>
+<rect id="Z Diagonal" x="428.842" y="102" width="100" height="483.275" rx="50" transform="rotate(37 428.842 102)" fill="white"/>
+<circle id="Joint Smooth Left" cx="86" cy="165.452" r="48" fill="white"/>
+<circle id="Joint Smooth Right" cx="563" cy="483.452" r="48" fill="white"/>
+</g>
+</g>
+<defs>
+<filter id="filter0_f_0_4" x="45" y="45" width="560" height="560" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="40" result="effect1_foregroundBlur_0_4"/>
+</filter>
+</defs>
+</svg>

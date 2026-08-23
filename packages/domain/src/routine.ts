@@ -525,6 +525,12 @@ export const computeDayCapacity = (
   };
 };
 
+const eventStartMinutes = (event: RoutineCalendarEvent, timeZone: string) => {
+  if (event.allDay) return -1;
+  const clock = zonedClock(event.start, timeZone);
+  return clock.hour * 60 + clock.minute;
+};
+
 export const eventsForDay = (events: RoutineCalendarEvent[], dayKey: string, timeZone: string) =>
   events
     .filter((event) => event.status !== "cancelled")
@@ -532,7 +538,10 @@ export const eventsForDay = (events: RoutineCalendarEvent[], dayKey: string, tim
       const startKey = event.allDay && /^\d{4}-\d{2}-\d{2}$/.test(event.start) ? event.start : zonedDayKey(new Date(event.start), timeZone);
       return startKey === dayKey;
     })
-    .sort((left, right) => left.start.localeCompare(right.start));
+    .sort((left, right) => {
+      const byTime = eventStartMinutes(left, timeZone) - eventStartMinutes(right, timeZone);
+      return byTime !== 0 ? byTime : left.title.localeCompare(right.title, "pt-BR");
+    });
 
 const sortTasks = (left: RoutineTask, right: RoutineTask) => {
   const priorityRank: Record<RoutineTaskPriority, number> = { high: 0, medium: 1, low: 2, none: 3 };

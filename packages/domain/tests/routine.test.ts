@@ -256,6 +256,19 @@ describe("daily briefing and capacity", () => {
     );
     expect(events.map((item) => item.title)).toEqual(["Hoje"]);
   });
+
+  it("orders events by local clock even when start strings mix offsets", () => {
+    const events = eventsForDay(
+      [
+        event({ title: "Inglês", start: "2026-08-22T13:30:00-03:00", end: "2026-08-22T14:00:00-03:00" }),
+        event({ title: "Fisioterapia", start: "2026-08-22T14:00:00.000Z", end: "2026-08-22T15:00:00.000Z" }),
+        event({ title: "Daily", start: "2026-08-22T09:30:00-03:00", end: "2026-08-22T10:00:00-03:00" })
+      ],
+      "2026-08-22",
+      zone
+    );
+    expect(events.map((item) => item.title)).toEqual(["Daily", "Fisioterapia", "Inglês"]);
+  });
 });
 
 describe("zoned day key", () => {
