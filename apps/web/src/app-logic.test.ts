@@ -245,7 +245,7 @@ describe("app-logic", () => {
   describe("tone helpers", () => {
     it("maps commitment and score tones", () => {
       expect(commitmentTone("healthy")).toBe("good");
-      expect(commitmentTone("stretched")).toBe("warn");
+      expect(commitmentTone("moderate")).toBe("warn");
       expect(commitmentTone("critical")).toBe("bad");
       expect(scoreBarTone(8)).toBe("good");
       expect(scoreBarTone(6)).toBe("warn");

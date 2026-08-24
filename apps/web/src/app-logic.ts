@@ -807,7 +807,7 @@ export function parseDateDisplay(value: string) {
 
 export function commitmentTone(status: CommitmentStatus): "good" | "warn" | "bad" {
   if (status === "healthy") return "good";
-  if (status === "stretched") return "warn";
+  if (status === "moderate") return "warn";
   return "bad";
 }
 
