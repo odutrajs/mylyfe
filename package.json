@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "npm run build -w @mylyfe/domain && concurrently -n api,web -c green,cyan \"npm run dev -w @mylyfe/api\" \"npm run dev -w @mylyfe/web\"",
     "build": "npm run build -w @mylyfe/domain && npm run build -w @mylyfe/api && npm run build -w @mylyfe/web",
-    "test": "npm run test -w @mylyfe/domain && npm run test -w @mylyfe/web && npm run test -w @mylyfe/mobile && npm run test -w @mylyfe/api",
+    "test": "npm run build -w @mylyfe/domain && npm run test -w @mylyfe/domain && npm run test -w @mylyfe/web && npm run test -w @mylyfe/mobile && npm run test -w @mylyfe/api",
     "test:coverage": "npm run test:coverage -w @mylyfe/domain && npm run test:coverage -w @mylyfe/web && npm run test:coverage -w @mylyfe/mobile && npm run test:coverage -w @mylyfe/api",
     "typecheck": "npm run typecheck -w @mylyfe/domain && npm run build -w @mylyfe/domain && npm run typecheck -w @mylyfe/api && npm run typecheck -w @mylyfe/web && npm run typecheck -w @mylyfe/secretary",
     "secretary": "npm run dev -w @mylyfe/secretary"
