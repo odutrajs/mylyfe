@@ -105,10 +105,10 @@ describe("categoryStatusCopy", () => {
   });
 
   it("describes over-budget and remaining amounts", () => {
-    expect(categoryStatusCopy(baseItem({ status: "over", remaining: -120 }))).toContain("acima do orcamento");
+    expect(categoryStatusCopy(baseItem({ status: "over", remaining: -120 }))).toContain("acima do orçamento");
     expect(categoryStatusCopy(baseItem({ remaining: 50, limit: 1000 }))).toContain("restando");
-    expect(categoryStatusCopy(baseItem({ remaining: 500 }))).toContain("disponivel");
-    expect(categoryStatusCopy(baseItem({ remaining: null, spent: 0 }))).toBe("Sem gastos neste mes");
+    expect(categoryStatusCopy(baseItem({ remaining: 500 }))).toContain("disponível");
+    expect(categoryStatusCopy(baseItem({ remaining: null, spent: 0 }))).toBe("Sem gastos neste mês");
   });
 });
 
