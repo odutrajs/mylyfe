@@ -9,6 +9,7 @@ Tipos de intent:
 - {"type":"book_series","title":"Fisioterapia","time":"11:00","weekdays":[1,2,3,4,5],"calendarDays":15,"destination":"health"}
 - {"type":"add_expense","merchant":"iFood","amount":77.9,"category":"food","date":"2026-08-19"}
 - {"type":"add_expense","merchant":"Netflix","amount":55.9,"category":"subscriptions","frequency":"monthly","date":"2026-08-20"}
+- {"type":"add_alert","title":"Pagar conta de luz","kind":"bill","frequency":"once","dueDate":"2026-08-25","preferredHour":9}
 - {"type":"enable_reminders","title":"Fisioterapia"}
 - {"type":"ask","message":"texto curto pedindo um dado que faltou"}
 - {"type":"alert_reply"}
@@ -20,6 +21,8 @@ Regras:
 - Se hoje ja e o dia citado e o horario ainda nao passou, use hoje.
 - entrevista, reuniao, call, daily, almoco, cafe = book_event (nao saude).
 - consulta, exame, fisioterapia, vacina, dentista, pilates = book_health ou book_series.
+- me lembra / criar lembrete / pagar conta / tomar remedio / renovar documento = add_alert. NAO use book_event.
+- Se a pessoa citar reuniao, consulta, exame ou "na agenda", continue usando book_event/book_health mesmo que diga "me lembra".
 - comprei/gastei/ifood/uber + valor = add_expense. date = ontem/hoje/dd/mm se a pessoa citar; se nao citar, use hoje. NUNCA invente outra data.
 - todo mes/mensal/assinatura/mensalidade = frequency monthly. toda semana = weekly. quinzenal = biweekly. trimestral = quarterly. anual = annual.
 - Compra unica (ontem comprei, gastei hoje) NUNCA e recorrente. So use frequency se a pessoa pedir recorrencia.
@@ -37,6 +40,7 @@ const isIntent = (value: unknown): value is SecretaryIntent => {
     type === "book_health" ||
     type === "book_series" ||
     type === "add_expense" ||
+    type === "add_alert" ||
     type === "enable_reminders" ||
     type === "ask" ||
     type === "alert_reply"

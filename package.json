@@ -10,13 +10,15 @@
   "scripts": {
     "dev": "npm run build -w @mylyfe/domain && concurrently -n api,web -c green,cyan \"npm run dev -w @mylyfe/api\" \"npm run dev -w @mylyfe/web\"",
     "build": "npm run build -w @mylyfe/domain && npm run build -w @mylyfe/api && npm run build -w @mylyfe/web",
-    "test": "npm run test -w @mylyfe/domain",
+    "test": "npm run test -w @mylyfe/domain && npm run test -w @mylyfe/web && npm run test -w @mylyfe/mobile && npm run test -w @mylyfe/api",
+    "test:coverage": "npm run test:coverage -w @mylyfe/domain && npm run test:coverage -w @mylyfe/web && npm run test:coverage -w @mylyfe/mobile && npm run test:coverage -w @mylyfe/api",
     "typecheck": "npm run typecheck -w @mylyfe/domain && npm run build -w @mylyfe/domain && npm run typecheck -w @mylyfe/api && npm run typecheck -w @mylyfe/web && npm run typecheck -w @mylyfe/secretary",
     "secretary": "npm run dev -w @mylyfe/secretary"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@vitest/coverage-v8": "^3.2.4"
   }
 }

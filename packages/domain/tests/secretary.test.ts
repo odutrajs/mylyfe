@@ -4,7 +4,11 @@ import {
   applyReplyToAlert,
   buildCycle,
   completeAlertOccurrence,
+  completePlanAlertOccurrence,
+  createEmptyPlan,
   createLifeAlert,
+  isAgendaLinkedAlert,
+  relatedSecretaryAlertIds,
   defaultSecretaryModuleState,
   defaultSecretarySettings,
   extractVerificationCode,
@@ -110,6 +114,41 @@ describe("alert tick and conversation", () => {
     expect(result.alert.cycle.status).toBe("snoozed");
     expect(result.reply).toMatch(/lembro/i);
     expect(result.alert.cycle.snoozeUntil).toBeTruthy();
+  });
+
+  it("treats appointment slots as one reminder family", () => {
+    const now = zonedDate(zone, 2026, 8, 20, 10);
+    const dueAt = zonedDate(zone, 2026, 8, 21, 14).toISOString();
+    const vespera = createLifeAlert(
+      { id: "alert-appt-1", title: "Dentista", kind: "one_off", frequency: "once", dueDate: "2026-08-21", notes: "slot:vespera" },
+      now,
+      zone
+    );
+    const threeHours = createLifeAlert(
+      { id: "alert-appt-1-3h", title: "Dentista", kind: "one_off", frequency: "once", dueDate: "2026-08-21", notes: "slot:3h" },
+      now,
+      zone
+    );
+    const vesperaDue = { ...vespera, cycle: { ...vespera.cycle, dueAt } };
+    const threeHoursDue = { ...threeHours, cycle: { ...threeHours.cycle, dueAt } };
+    expect(isAgendaLinkedAlert(vesperaDue)).toBe(true);
+    expect(relatedSecretaryAlertIds([vesperaDue, threeHoursDue], vesperaDue.id).sort()).toEqual([
+      "alert-appt-1",
+      "alert-appt-1-3h"
+    ]);
+
+    const plan = completePlanAlertOccurrence(
+      {
+        ...createEmptyPlan("test"),
+        secretary: {
+          ...defaultSecretaryModuleState(),
+          alerts: [vesperaDue, threeHoursDue]
+        }
+      },
+      vesperaDue.id,
+      now
+    );
+    expect(plan.secretary.alerts.every((alert) => alert.status === "completed")).toBe(true);
   });
 
   it("completes a one-off reminder and advances a daily one", () => {

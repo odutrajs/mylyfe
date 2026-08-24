@@ -1,5 +1,5 @@
 import { addDays, weekdayIndex, zonedDate, zonedParts } from "./secretary.js";
-import type { HealthAppointmentKind } from "./types.js";
+import type { AlertFrequency, AlertKind, ExpenseCategory, HealthAppointmentKind } from "./types.js";
 
 const pad = (value: number) => String(value).padStart(2,  "0");
 
@@ -289,18 +289,142 @@ const hasScheduleIntent = (normalized: string) =>
   /\b(na|no)\s+(minha|nossa|sua)?\s*(agenda|calendario)\b/.test(normalized) ||
   /@secretaria\b|@agendar\b/.test(normalized);
 
-const looksLikeBillReply = (normalized: string) =>
-  /\b(ainda nao|nao paguei|nao fui|me lembra|me avisa|depois te falo|pendencias)\b/.test(normalized);
+const looksLikeBillReply = (normalized: string) => {
+  if (/\b(ainda nao|nao paguei|nao fui|depois te falo|pendencias)\b/.test(normalized)) return true;
+  if (!/\b(me lembra|me avisa)\b/.test(normalized)) return false;
+  const rest = normalized
+    .replace(/\b(me lembra|me avisa)\b/g, " ")
+    .replace(/\b(amanha|depois|por favor|pf|pfv)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return rest.length < 3;
+};
+
+const REMINDER_LANGUAGE =
+  /\b(lembrete|me lembra|me avisa|lembrar (?:de|que)|nao (?:me )?esquecer|me recorde)\b/;
+const REMINDER_TASK =
+  /\b(pagar|pagamento|conta|boleto|fatura|vencimento|tomar|remedio|renovar|documento|prazo|iptu|ipva)\b/;
+
+const hasStrongAgendaCue = (normalized: string) =>
+  Boolean(knownActivity(normalized) || extractMeeting(normalized) || hasEventNoun(normalized)) ||
+  /\b(na|no)\s+(minha|nossa|sua)?\s*(agenda|calendario)\b/.test(normalized) ||
+  /@agendar\b/.test(normalized);
+
+export const looksLikeReminderCommand = (text: string) => {
+  const normalized = fold(text);
+  if (looksLikeBillReply(normalized) || /consulta agendada/.test(normalized)) return false;
+  if (hasStrongAgendaCue(normalized)) return false;
+  if (REMINDER_LANGUAGE.test(normalized)) return true;
+  const hasWhen =
+    Boolean(parseTime(normalized)) ||
+    /\b(hoje|amanha|agora|todo dia|todos os dias|toda semana|todo mes|diariamente|semanal|mensal)\b/.test(
+      normalized
+    ) ||
+    /\b\d{1,2}\s*\/\s*\d{1,2}\b/.test(normalized);
+  return REMINDER_TASK.test(normalized) && hasWhen;
+};
+
+export type ParsedReminderCommand = {
+  title: string;
+  kind: AlertKind;
+  frequency: AlertFrequency;
+  dueDate?: string;
+  weekday?: number;
+  dueDay?: number;
+  preferredHour: number;
+  category?: ExpenseCategory;
+};
+
+const reminderKind = (normalized: string): { kind: AlertKind; category?: ExpenseCategory } => {
+  if (/\b(iptu|ipva|imposto|das|irpf)\b/.test(normalized)) return { kind: "tax" };
+  if (/\b(tomar|remedio|medicacao|habito)\b/.test(normalized)) return { kind: "habit", category: "health" };
+  if (/\b(renovar|documento|receita|cnh|passaporte|prazo)\b/.test(normalized)) return { kind: "document" };
+  if (/\b(netflix|spotify|assinatura)\b/.test(normalized)) return { kind: "subscription" };
+  if (/\b(pagar|pagamento|conta|boleto|fatura|luz|agua|aluguel|vencimento)\b/.test(normalized)) return { kind: "bill" };
+  return { kind: "one_off" };
+};
+
+const reminderFrequency = (normalized: string): AlertFrequency => {
+  if (/\b(todo dia|todos os dias|diariamente|todo santo dia)\b/.test(normalized)) return "daily";
+  if (
+    /\b(toda semana|todas as semanas|semanal)\b/.test(normalized) ||
+    /\b(toda|todo|todas|todos)\s+(segunda|terca|quarta|quinta|sexta|sabado|domingo)s?\b/.test(normalized)
+  ) {
+    return "weekly";
+  }
+  if (/\b(todo mes|todos os meses|mensal)\b/.test(normalized)) return "monthly";
+  return "once";
+};
+
+const reminderTitle = (normalized: string) => {
+  const cleaned = stripScheduleWords(normalized)
+    .replace(/\b(lembrete|lembrar|lembra|avisa|avisar|recorde|esquecer)\b/g, " ")
+    .replace(/\b(quero|pode|criar|adicionar|cadastrar|faz|fazer|coloca|colocar|me)\b/g, " ")
+    .replace(/\b(um|uma|o|a|de|que|pra|para)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned || cleaned.length < 3) return "";
+  return cleaned.replace(/^\w/, (letter) => letter.toUpperCase());
+};
+
+export const parseReminderCommand = (
+  text: string,
+  now = new Date(),
+  timeZone = "America/Sao_Paulo"
+): ParsedReminderCommand | null => {
+  if (!looksLikeReminderCommand(text)) return null;
+  const normalized = fold(text);
+  const title = reminderTitle(normalized);
+  if (!title) return null;
+
+  const frequency = reminderFrequency(normalized);
+  const time = parseTime(normalized);
+  const [hour = 9] = time ? time.split(":").map(Number) : [9];
+  const preferredHour = Math.min(21, Math.max(8, hour));
+  const start = parseStartDate(normalized, now, timeZone);
+  const dueDate = dateKey(start, timeZone);
+  const { kind, category } = reminderKind(normalized);
+
+  if (frequency === "weekly") {
+    const weekdays = parseWeekdays(normalized);
+    return {
+      title,
+      kind,
+      category,
+      frequency,
+      weekday: weekdays[0] ?? weekdayIndex(start, timeZone),
+      preferredHour
+    };
+  }
+  if (frequency === "monthly") {
+    return {
+      title,
+      kind,
+      category,
+      frequency,
+      dueDay: zonedParts(start, timeZone).day,
+      preferredHour
+    };
+  }
+  if (frequency === "daily") {
+    return { title, kind, category, frequency, preferredHour };
+  }
+  return { title, kind, category, frequency, dueDate, preferredHour };
+};
 
 export const looksLikeIncompleteAgendaCommand = (text: string) => {
   const normalized = fold(text);
-  if (looksLikeBillReply(normalized) || /consulta agendada/.test(normalized)) return false;
+  if (looksLikeBillReply(normalized) || /consulta agendada/.test(normalized) || looksLikeReminderCommand(text)) {
+    return false;
+  }
   return (hasEventNoun(normalized) && (hasEventAnnounce(normalized) || /\bcom\b/.test(normalized))) && !parseTime(normalized);
 };
 
 export const looksLikeAgendaCommand = (text: string) => {
   const normalized = fold(text);
-  if (looksLikeBillReply(normalized) || /consulta agendada/.test(normalized)) return false;
+  if (looksLikeBillReply(normalized) || /consulta agendada/.test(normalized) || looksLikeReminderCommand(text)) {
+    return false;
+  }
   const time = parseTime(normalized);
   const weekdays = parseWeekdays(normalized);
   const span = parseSpan(normalized);

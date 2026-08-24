@@ -28,7 +28,7 @@ import {
   upsertHealthMedication,
   upsertHealthProfile
 } from "@mylyfe/domain";
-import { Activity, Bell, HeartPulse, Pill, Plus, Trash2 } from "lucide-react";
+import { Activity, Bell, CalendarDays, HeartPulse, Pill, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { MoneyField } from "./MoneyField";
 import { currency, uid } from "./lib";
@@ -298,14 +298,22 @@ export function HealthView({
             </div>
           </header>
           {overdueCares.length === 0 && upcoming.length === 0 && (
-            <p className="panel-note">Nada atrasado. Cadastre a cadencia dos check-ups em Consultas.</p>
+            <div className="empty-state">
+              <span>Nada atrasado</span>
+              <small>Cadastre a cadencia dos check-ups em Consultas.</small>
+            </div>
           )}
           {overdueCares.map((care) => (
-            <article key={care.id} className="secretary-alert">
-              <strong>{care.title}</strong>
-              <span>
-                {personName(plan, care.personId)} · {healthCareStatusLabels[healthCareStatus(care)]}
+            <article key={care.id} className="list-row">
+              <span className="list-row-icon">
+                <Activity size={18} />
               </span>
+              <div className="list-row-copy secretary-alert">
+                <strong>{care.title}</strong>
+                <span>
+                  {personName(plan, care.personId)} · {healthCareStatusLabels[healthCareStatus(care)]}
+                </span>
+              </div>
               <div className="secretary-alert-actions">
                 <button className="secondary-button" type="button" onClick={() => apply(markHealthCareDone(plan, care.id))}>
                   Marquei como feito
@@ -314,12 +322,17 @@ export function HealthView({
             </article>
           ))}
           {upcoming.slice(0, 4).map((appointment) => (
-            <article key={appointment.id} className="secretary-alert">
-              <strong>{appointment.title}</strong>
-              <span>
-                {formatWhen(appointment.start, timezone)}
-                {appointment.location ? ` · ${appointment.location}` : ""} · na agenda da Rotina
+            <article key={appointment.id} className="list-row">
+              <span className="list-row-icon">
+                <CalendarDays size={18} />
               </span>
+              <div className="list-row-copy secretary-alert">
+                <strong>{appointment.title}</strong>
+                <span>
+                  {formatWhen(appointment.start, timezone)}
+                  {appointment.location ? ` · ${appointment.location}` : ""} · na agenda da Rotina
+                </span>
+              </div>
             </article>
           ))}
         </section>
@@ -509,18 +522,28 @@ export function HealthView({
               <h2>Consultas marcadas</h2>
             </div>
           </header>
-          {health.appointments.length === 0 && <p className="panel-note">Nenhuma consulta ainda. Ao cadastrar, ela entra na Rotina.</p>}
+          {health.appointments.length === 0 && (
+            <div className="empty-state">
+              <span>Nenhuma consulta ainda</span>
+              <small>Ao cadastrar, ela entra na Rotina.</small>
+            </div>
+          )}
           {health.appointments
             .slice()
             .sort((left, right) => left.start.localeCompare(right.start))
             .map((appointment) => (
-              <article key={appointment.id} className="secretary-alert">
-                <strong>{appointment.done ? `${appointment.title} (feito)` : appointment.title}</strong>
-                <span>
-                  {formatWhen(appointment.start, timezone)} · {personName(plan, appointment.personId)}
-                  {appointment.location ? ` · ${appointment.location}` : ""}
-                  {appointment.remindOnWhatsApp ? " · Secretaria: vespera, 3h, 1h e check 2h depois" : ""}
+              <article key={appointment.id} className="list-row">
+                <span className="list-row-icon">
+                  <CalendarDays size={18} />
                 </span>
+                <div className="list-row-copy secretary-alert">
+                  <strong>{appointment.done ? `${appointment.title} (feito)` : appointment.title}</strong>
+                  <span>
+                    {formatWhen(appointment.start, timezone)} · {personName(plan, appointment.personId)}
+                    {appointment.location ? ` · ${appointment.location}` : ""}
+                    {appointment.remindOnWhatsApp ? " · Secretaria: vespera, 3h, 1h e check 2h depois" : ""}
+                  </span>
+                </div>
                 <div className="secretary-alert-actions">
                   {!appointment.done && (
                     <button className="secondary-button" type="button" onClick={() => apply(markHealthAppointmentDone(plan, appointment.id))}>
@@ -603,11 +626,16 @@ export function HealthView({
           {health.cares.map((care) => {
             const status = healthCareStatus(care);
             return (
-              <article key={care.id} className="secretary-alert">
-                <strong>{care.title}</strong>
-                <span>
-                  {personName(plan, care.personId)} · a cada {care.intervalMonths} meses · {healthCareStatusLabels[status]}
+              <article key={care.id} className="list-row">
+                <span className="list-row-icon">
+                  <Activity size={18} />
                 </span>
+                <div className="list-row-copy secretary-alert">
+                  <strong>{care.title}</strong>
+                  <span>
+                    {personName(plan, care.personId)} · a cada {care.intervalMonths} meses · {healthCareStatusLabels[status]}
+                  </span>
+                </div>
                 <div className="secretary-alert-actions">
                   <button className="secondary-button" type="button" onClick={() => apply(markHealthCareDone(plan, care.id))}>
                     Fiz agora
@@ -689,16 +717,26 @@ export function HealthView({
             <h2>Continuos</h2>
           </div>
         </header>
-        {health.medications.length === 0 && <p className="panel-note">Nenhum medicamento cadastrado.</p>}
+        {health.medications.length === 0 && (
+          <div className="empty-state">
+            <span>Nenhum medicamento cadastrado</span>
+            <small>A Secretaria pode cobrar o continuo no WhatsApp.</small>
+          </div>
+        )}
         {health.medications.map((medication) => (
-          <article key={medication.id} className="secretary-alert">
-            <strong>{medication.name}</strong>
-            <span>
-              {personName(plan, medication.personId)}
-              {medication.dosage ? ` · ${medication.dosage}` : ""}
-              {medication.remindOnWhatsApp ? ` · WhatsApp as ${String(medication.reminderHour).padStart(2, "0")}h` : ""}
-              {medication.prescriptionExpiresOn ? ` · receita ${medication.prescriptionExpiresOn}` : ""}
+          <article key={medication.id} className="list-row">
+            <span className="list-row-icon">
+              <Pill size={18} />
             </span>
+            <div className="list-row-copy secretary-alert">
+              <strong>{medication.name}</strong>
+              <span>
+                {personName(plan, medication.personId)}
+                {medication.dosage ? ` · ${medication.dosage}` : ""}
+                {medication.remindOnWhatsApp ? ` · WhatsApp as ${String(medication.reminderHour).padStart(2, "0")}h` : ""}
+                {medication.prescriptionExpiresOn ? ` · receita ${medication.prescriptionExpiresOn}` : ""}
+              </span>
+            </div>
             <div className="secretary-alert-actions">
               <button className="secondary-button" type="button" onClick={() => editMed(medication)}>
                 Editar

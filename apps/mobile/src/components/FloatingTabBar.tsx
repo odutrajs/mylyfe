@@ -1,5 +1,5 @@
 import { canAccessSharedHome } from "@mylyfe/domain";
-import { Bell, CalendarClock, House, PieChart, Plus, ShoppingBag } from "lucide-react-native";
+import { Bell, CalendarClock, House, ListTodo, PieChart, Plus, ShoppingBag } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../auth-context";
@@ -12,6 +12,7 @@ const tabs = [
   { name: "finance", label: "Financeiro", Icon: PieChart, sheet: "transaction" as const },
   { name: "market", label: "Mercado", Icon: ShoppingBag, sheet: "shopping" as const },
   { name: "reminders", label: "Lembretes", Icon: Bell, sheet: "reminder" as const },
+  { name: "tasks", label: "Tarefas", Icon: ListTodo, sheet: "task" as const },
   { name: "agenda", label: "Agenda", Icon: CalendarClock, sheet: null }
 ];
 
@@ -67,7 +68,7 @@ export function FloatingTabBar({
           backgroundColor: colors.surface,
           borderRadius: radius.pill,
           paddingVertical: 10,
-          paddingHorizontal: 8,
+          paddingHorizontal: 4,
           ...shadow.bar
         }}
       >
@@ -80,8 +81,10 @@ export function FloatingTabBar({
               onPress={() => navigation.navigate(tab.name)}
               style={{ flex: 1, alignItems: "center", gap: 4 }}
             >
-              <tab.Icon size={20} color={color} />
-              <Text style={{ fontSize: 10, fontFamily: active ? fonts.semibold : fonts.regular, color }}>{tab.label}</Text>
+              <tab.Icon size={18} color={color} />
+              <Text numberOfLines={1} style={{ fontSize: 9, fontFamily: active ? fonts.semibold : fonts.regular, color }}>
+                {tab.label}
+              </Text>
             </Pressable>
           );
         })}

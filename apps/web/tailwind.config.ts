@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"]
+        sans: ["SF Pro Rounded", "ui-rounded", "Nunito", "system-ui", "sans-serif"]
       }
     }
   },

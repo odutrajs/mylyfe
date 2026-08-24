@@ -10,6 +10,7 @@ export type PublicSession = {
   personalPlanId: string;
   name: string;
   email: string;
+  hasPushToken: boolean;
 };
 
 export type AuthResult = {

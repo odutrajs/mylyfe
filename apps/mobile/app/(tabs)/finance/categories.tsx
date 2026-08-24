@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../../../src/components/Screen";
 import { parseMoney, preciseCurrency } from "../../../src/format";
 import { usePlan } from "../../../src/plan-context";
-import { colors, radius, shadow, spacing } from "../../../src/theme";
+import { colors, inputReset, radius, shadow, spacing } from "../../../src/theme";
 
 export default function CategoriesScreen() {
   const insets = useSafeAreaInsets();
@@ -53,7 +53,7 @@ export default function CategoriesScreen() {
               keyboardType="decimal-pad"
               placeholder="Novo teto"
               placeholderTextColor={colors.textSoft}
-              style={{ backgroundColor: colors.background, borderRadius: radius.md, padding: 12, color: colors.text }}
+              style={{ backgroundColor: colors.background, borderRadius: radius.md, padding: 12, color: colors.text, ...inputReset }}
             />
             <Pressable onPress={() => void save(item.category)} style={{ alignSelf: "flex-start" }}>
               <Text style={{ color: colors.accent, fontWeight: "800" }}>Salvar teto</Text>

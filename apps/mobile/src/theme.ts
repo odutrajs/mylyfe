@@ -1,3 +1,5 @@
+import type { TextStyle } from "react-native";
+
 export const colors = {
   background: "#F7FAFC",
   surface: "#FFFFFF",
@@ -63,3 +65,8 @@ export const fonts = {
   semibold: "PlusJakartaSans_600SemiBold",
   bold: "PlusJakartaSans_700Bold"
 };
+
+export const inputReset = {
+  outlineWidth: 0,
+  outlineColor: "transparent"
+} as unknown as TextStyle;

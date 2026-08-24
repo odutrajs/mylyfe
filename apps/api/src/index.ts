@@ -53,8 +53,8 @@ import {
   finishMicrosoftConnect,
   googleCallbackErrorRedirect,
   googleConfigured,
-  listPublicConnections,
   listRoutineEvents,
+  loadRoutineCalendarSnapshot,
   microsoftCallbackErrorRedirect,
   microsoftConfigured,
   refreshConnectionCalendars,
@@ -677,16 +677,16 @@ app.get(
   "/api/plans/:id/routine",
   asyncRoute(async (request, response) => {
     const planId = await resolveRoutinePlanId(request.headers.authorization, routeParam(request.params.id, "primary"));
-    const [state, connections, events] = await Promise.all([
+    const forceSync = String(request.query.sync ?? "") === "1";
+    const [state, calendar] = await Promise.all([
       routineSnapshot(repository, planId),
-      listPublicConnections(planId),
-      listRoutineEvents(planId)
+      loadRoutineCalendarSnapshot(repository, planId, { sync: forceSync })
     ]);
     response.json({
       ...state,
-      connections,
-      events: events.events,
-      syncedAt: events.syncedAt,
+      connections: calendar.connections,
+      events: calendar.events,
+      syncedAt: calendar.syncedAt,
       googleConfigured: googleConfigured(),
       microsoftConfigured: microsoftConfigured()
     });

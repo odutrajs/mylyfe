@@ -8,6 +8,7 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, phone?: string) => Promise<PublicSession>;
   enterApp: () => void;
+  markPushTokenSaved: () => void;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 };
@@ -70,6 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       enterApp: () => {
         if (pendingSession) setSession(pendingSession);
         setPendingSession(null);
+      },
+      markPushTokenSaved: () => {
+        setSession((current) => (current ? { ...current, hasPushToken: true } : current));
       },
       logout: async () => {
         try {

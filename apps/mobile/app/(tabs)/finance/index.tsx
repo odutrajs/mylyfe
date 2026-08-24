@@ -1,5 +1,7 @@
 import {
   analyzePlan,
+  calculateMonthExpenseLimit,
+  calculateMonthlyCashFlow,
   dateFromMonthKey,
   formatMonthKey,
   selectDashboardCategoryBudgets
@@ -30,12 +32,12 @@ export default function BudgetsScreen() {
   const monthName = monthTitle(month).split(" ")[0] ?? "";
 
   const analysis = useMemo(() => (plan ? analyzePlan(plan, asOf) : null), [asOf, plan]);
+  const income = useMemo(() => (plan ? calculateMonthlyCashFlow(plan, month).income : 0), [month, plan]);
   const spent = analysis?.spending.currentMonthSpend ?? 0;
-  const limit =
-    plan?.budget.monthlyExpenseTarget ||
-    analysis?.categoryBudgetPlan.expenseEnvelope ||
-    analysis?.budgetSuggestion.monthlyExpenseTarget ||
-    0;
+  const limit = useMemo(() => {
+    if (!plan) return 0;
+    return calculateMonthExpenseLimit(plan, month) || analysis?.budgetSuggestion.monthlyExpenseTarget || 0;
+  }, [analysis?.budgetSuggestion.monthlyExpenseTarget, month, plan]);
   const percent = limit > 0 ? spent / limit : 0;
   const over = limit > 0 && spent > limit;
   const categories = analysis ? selectDashboardCategoryBudgets(analysis.categoryBudgets) : [];
@@ -69,7 +71,9 @@ export default function BudgetsScreen() {
             <View style={{ flex: 1, paddingRight: 12, gap: 4 }}>
               <Text style={{ fontSize: 14, fontFamily: fonts.regular, color: "#808080" }}>Gastos de {monthName}</Text>
               <Text style={{ fontSize: 32, fontFamily: fonts.semibold, color: colors.text }}>{currency.format(spent)}</Text>
-              <Text style={{ fontSize: 14, fontFamily: fonts.regular, color: "#808080" }}>de {currency.format(limit)}</Text>
+              <Text style={{ fontSize: 14, fontFamily: fonts.regular, color: colors.success }}>
+                Ganhos {currency.format(income)}
+              </Text>
               <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: colors.accent, marginTop: 4 }}>Ver extrato</Text>
             </View>
             <SpendRing percent={percent} size={76} over={over} />
@@ -102,7 +106,9 @@ export default function BudgetsScreen() {
                   key={item.category}
                   item={item}
                   showDivider={index < categories.length - 1}
-                  onPress={() => router.push(`/(tabs)/finance/category/${item.category}`)}
+                  onPress={() =>
+                    router.push({ pathname: "/(tabs)/finance/category/[id]", params: { id: item.category, month } })
+                  }
                 />
               ))
             )}

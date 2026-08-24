@@ -534,7 +534,12 @@ export function RoutineView({
           ))}
         </div>
         <section className="panel wide">
-          {filteredTasks.length === 0 && <p className="panel-note">Nada nesta lista.</p>}
+          {filteredTasks.length === 0 && (
+            <div className="empty-state">
+              <span>Nada nesta lista</span>
+              <small>Capture uma tarefa acima para comecar.</small>
+            </div>
+          )}
           {filteredTasks.map((task) => (
             <TaskRow
               key={task.id}

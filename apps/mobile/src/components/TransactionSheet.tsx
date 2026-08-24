@@ -1,5 +1,5 @@
-import type { ExpenseCategory, FinancialTransaction } from "@mylyfe/domain";
-import { formatMonthKey } from "@mylyfe/domain";
+import type { ExpenseCategory, FinancialTransaction, Frequency, IncomeSource, IncomeType } from "@mylyfe/domain";
+import { formatMonthKey, monthlyizeIncome } from "@mylyfe/domain";
 import { StatusBar } from "expo-status-bar";
 import {
   ArrowDown,
@@ -30,7 +30,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, Tex
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { todayKey } from "../format";
 import { usePlan } from "../plan-context";
-import { colors, fonts } from "../theme";
+import { colors, fonts, inputReset } from "../theme";
 import { useUI } from "../ui-context";
 import { SelectSheet } from "./SelectSheet";
 
@@ -38,9 +38,10 @@ type Step = "amount" | "details" | "category";
 type Kind = "expense" | "income";
 type Payment = "credit" | "debit" | "pix" | "cash";
 type Term = "cash" | "installment";
+type Picker = "when" | "payment" | "term" | "incomeType" | "incomeFrequency";
 
-const muted = "#808080";
-const cardBorder = "rgba(0, 0, 0, 0.05)";
+const muted = colors.textMuted;
+const cardBorder = colors.border;
 const iconAction = colors.accent;
 const iconBlack = "#000000";
 
@@ -51,7 +52,32 @@ const payments: Array<{ id: Payment; label: string }> = [
   { id: "cash", label: "Dinheiro" }
 ];
 
+const incomeTypes: Array<{ id: IncomeType; label: string }> = [
+  { id: "clt", label: "CLT" },
+  { id: "pj", label: "PJ" },
+  { id: "freelance", label: "Freelance" },
+  { id: "company", label: "Empresa" },
+  { id: "rent", label: "Aluguel" },
+  { id: "dividends", label: "Dividendos" },
+  { id: "pension", label: "Pensão" },
+  { id: "other", label: "Outros" }
+];
+
+const incomeFrequencies: Array<{ id: Frequency; label: string }> = [
+  { id: "monthly", label: "Todo mês" },
+  { id: "single", label: "Só desta vez" },
+  { id: "weekly", label: "Toda semana" },
+  { id: "biweekly", label: "Quinzenal" },
+  { id: "quarterly", label: "Trimestral" },
+  { id: "annual", label: "Anual" }
+];
+
 const parcelOptions = [2, 3, 4, 6, 10, 12, 18, 24];
+
+const nextId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const incomeStability = (type: IncomeType) =>
+  type === "clt" || type === "pj" || type === "pension" ? 8 : type === "rent" || type === "dividends" ? 6 : 5;
 
 const normalize = (value: string) =>
   value
@@ -113,7 +139,9 @@ export function TransactionSheet() {
   const [payment, setPayment] = useState<Payment>("credit");
   const [term, setTerm] = useState<Term>("cash");
   const [installmentTotal, setInstallmentTotal] = useState(2);
-  const [picker, setPicker] = useState<"when" | "payment" | "term" | null>(null);
+  const [incomeType, setIncomeType] = useState<IncomeType>("other");
+  const [incomeFrequency, setIncomeFrequency] = useState<Frequency>("monthly");
+  const [picker, setPicker] = useState<Picker | null>(null);
   const categories = plan?.expenseCategories?.filter((item) => item.isActive) ?? [];
   const selectedCategory = categories.find((item) => item.id === category);
   const thisMonth = formatMonthKey(new Date());
@@ -126,6 +154,8 @@ export function TransactionSheet() {
         : `Em ${monthLabel(dateMonth)}`;
   const paymentLabel = payments.find((item) => item.id === payment)?.label ?? "Crédito (Padrão)";
   const termLabel = term === "installment" ? `${installmentTotal}x` : "À vista";
+  const incomeTypeLabel = incomeTypes.find((item) => item.id === incomeType)?.label ?? "Outros";
+  const incomeFrequencyLabel = incomeFrequencies.find((item) => item.id === incomeFrequency)?.label ?? "Todo mês";
   const canContinue = cents > 0;
   const canFinish = Boolean(plan && name.trim() && cents > 0 && (kind === "income" || category));
 
@@ -140,26 +170,70 @@ export function TransactionSheet() {
 
   const submit = async () => {
     if (!canFinish || !plan) return;
-    const parcelado = term === "installment" && installmentTotal > 1;
-    const transaction: FinancialTransaction = {
-      id: `tx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      date,
-      merchant: name.trim(),
-      amount: cents / 100,
-      type: kind,
-      audience: "personal",
-      nature: parcelado ? "debtPayment" : kind === "income" ? "extraordinary" : "variable",
-      category: kind === "income" ? "other" : (category ?? "other"),
-      confidence: 1,
-      source: "manual",
-      reviewed: true,
-      installment: parcelado ? { current: 1, total: installmentTotal } : undefined
-    };
-    await updatePlan((currentPlan) => ({
-      ...currentPlan,
-      transactions: [...currentPlan.transactions, transaction],
-      updatedAt: new Date().toISOString()
-    }));
+    const amount = cents / 100;
+    const title = name.trim();
+    await updatePlan((currentPlan) => {
+      const updatedAt = new Date().toISOString();
+      if (kind === "income") {
+        const recurring = incomeFrequency !== "single";
+        const source: IncomeSource = {
+          id: nextId("income"),
+          name: title,
+          type: incomeType,
+          ownerId: currentPlan.profile.people.find((person) => person.role === "primary")?.id,
+          netAmount: amount,
+          frequency: incomeFrequency,
+          isRecurring: recurring,
+          stabilityScore: incomeStability(incomeType),
+          startDate: `${date.slice(0, 7)}-01`
+        };
+        const transaction: FinancialTransaction = {
+          id: nextId("tx"),
+          date,
+          merchant: title,
+          amount,
+          type: "income",
+          audience: "personal",
+          nature: recurring ? "recurring" : "extraordinary",
+          category: "other",
+          confidence: 1,
+          source: "manual",
+          reviewed: true
+        };
+        const monthlyAmount = recurring ? monthlyizeIncome(source) : 0;
+        const currentTarget = currentPlan.budget.monthlyExpenseTarget;
+        return {
+          ...currentPlan,
+          incomeSources: recurring ? [...currentPlan.incomeSources, source] : currentPlan.incomeSources,
+          transactions: [...currentPlan.transactions, transaction],
+          budget:
+            recurring && currentTarget
+              ? { ...currentPlan.budget, monthlyExpenseTarget: currentTarget + monthlyAmount }
+              : currentPlan.budget,
+          updatedAt
+        };
+      }
+      const parcelado = term === "installment" && installmentTotal > 1;
+      const transaction: FinancialTransaction = {
+        id: nextId("tx"),
+        date,
+        merchant: title,
+        amount,
+        type: "expense",
+        audience: "personal",
+        nature: parcelado ? "debtPayment" : "variable",
+        category: category ?? "other",
+        confidence: 1,
+        source: "manual",
+        reviewed: true,
+        installment: parcelado ? { current: 1, total: installmentTotal } : undefined
+      };
+      return {
+        ...currentPlan,
+        transactions: [...currentPlan.transactions, transaction],
+        updatedAt
+      };
+    });
     closeSheet();
   };
 
@@ -221,20 +295,26 @@ export function TransactionSheet() {
               inputMode="numeric"
               showSoftInputOnFocus
               selectionColor={colors.accent}
-              style={{ fontSize: 44, fontFamily: fonts.bold, color: colors.text, paddingVertical: 8 }}
+              style={{ fontSize: 44, fontFamily: fonts.semibold, color: colors.text, paddingVertical: 8, ...inputReset }}
             />
             <View style={{ flexDirection: "row", gap: 16 }}>
               <KindCard
                 label="Despesa"
                 Icon={ArrowDown}
                 active={kind === "expense"}
-                onPress={() => setKind("expense")}
+                onPress={() => {
+                  setKind("expense");
+                  setPicker(null);
+                }}
               />
               <KindCard
                 label="Entrada"
                 Icon={ArrowUp}
                 active={kind === "income"}
-                onPress={() => setKind("income")}
+                onPress={() => {
+                  setKind("income");
+                  setPicker(null);
+                }}
               />
             </View>
           </View>
@@ -260,21 +340,29 @@ export function TransactionSheet() {
                 onChangeText={setName}
                 placeholder={kind === "income" ? "Dê um nome para sua entrada" : "Dê um nome para sua despesa"}
                 placeholderTextColor={muted}
-                style={{ fontSize: 16, fontFamily: fonts.regular, color: colors.text, padding: 0 }}
+                selectionColor={colors.accent}
+                style={{ fontSize: 16, fontFamily: fonts.regular, color: colors.text, padding: 0, ...inputReset }}
               />
             </DetailRow>
             <DetailRow label="A partir de quando" value={whenLabel} icon={Calendar} onPress={() => setPicker("when")} />
             {kind === "expense" ? (
-              <DetailRow
-                label="Categoria"
-                value={selectedCategory?.name ?? "Escolha uma categoria"}
-                valueColor={selectedCategory ? colors.text : muted}
-                icon={Tag}
-                onPress={() => setStep("category")}
-              />
-            ) : null}
-            <DetailRow label="Forma de pagamento" value={paymentLabel} icon={CreditCard} onPress={() => setPicker("payment")} />
-            <DetailRow label="Prazo" value={termLabel} icon={Clock} onPress={() => setPicker("term")} last />
+              <>
+                <DetailRow
+                  label="Categoria"
+                  value={selectedCategory?.name ?? "Escolha uma categoria"}
+                  valueColor={selectedCategory ? colors.text : muted}
+                  icon={Tag}
+                  onPress={() => setStep("category")}
+                />
+                <DetailRow label="Forma de pagamento" value={paymentLabel} icon={CreditCard} onPress={() => setPicker("payment")} />
+                <DetailRow label="Prazo" value={termLabel} icon={Clock} onPress={() => setPicker("term")} last />
+              </>
+            ) : (
+              <>
+                <DetailRow label="Tipo da entrada" value={incomeTypeLabel} icon={Briefcase} onPress={() => setPicker("incomeType")} />
+                <DetailRow label="Recorrência" value={incomeFrequencyLabel} icon={Repeat} onPress={() => setPicker("incomeFrequency")} last />
+              </>
+            )}
           </ScrollView>
         ) : null}
 
@@ -297,7 +385,7 @@ export function TransactionSheet() {
                         width: 40,
                         height: 40,
                         borderRadius: 12,
-                        backgroundColor: "#F3F4F6",
+                        backgroundColor: colors.accentSoft,
                         alignItems: "center",
                         justifyContent: "center"
                       }}
@@ -359,6 +447,22 @@ export function TransactionSheet() {
         }}
         onClose={() => setPicker(null)}
       />
+      <SelectSheet
+        visible={picker === "incomeType"}
+        title="Tipo da entrada"
+        options={incomeTypes.map((item) => ({ value: item.id, label: item.label }))}
+        selected={incomeType}
+        onSelect={setIncomeType}
+        onClose={() => setPicker(null)}
+      />
+      <SelectSheet
+        visible={picker === "incomeFrequency"}
+        title="Recorrência"
+        options={incomeFrequencies.map((item) => ({ value: item.id, label: item.label }))}
+        selected={incomeFrequency}
+        onSelect={setIncomeFrequency}
+        onClose={() => setPicker(null)}
+      />
       </View>
     </Modal>
   );
@@ -382,17 +486,15 @@ function KindCard({
         flex: 1,
         height: 96,
         borderRadius: 24,
-        backgroundColor: active ? colors.accent : colors.surface,
-        borderWidth: active ? 0 : 1,
-        borderColor: "#E5E7EB",
+        backgroundColor: active ? colors.accent : colors.accentSoft,
         alignItems: "center",
         justifyContent: "center",
         gap: 8,
         padding: 16
       }}
     >
-      <Icon size={18} color={active ? "#FFFFFF" : muted} strokeWidth={2} />
-      <Text style={{ fontSize: 15, fontFamily: active ? fonts.regular : fonts.regular, color: active ? "#FFFFFF" : muted }}>
+      <Icon size={18} color={active ? "#FFFFFF" : colors.accent} strokeWidth={2} />
+      <Text style={{ fontSize: 15, fontFamily: fonts.regular, color: active ? "#FFFFFF" : colors.text }}>
         {label}
       </Text>
     </Pressable>

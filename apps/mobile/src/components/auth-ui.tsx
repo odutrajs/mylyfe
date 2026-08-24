@@ -1,25 +1,63 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { type ReactNode } from "react";
+import {
+  cloneElement,
+  createContext,
+  isValidElement,
+  useContext,
+  useEffect,
+  useState,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode
+} from "react";
 import {
   Image,
+  Keyboard,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  UIManager,
   View,
   type StyleProp,
   type ViewStyle
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, fonts } from "../theme";
+import { colors, fonts, inputReset } from "../theme";
 
 const loginMascot = require("../../assets/finance/mascote-login.png");
 
 export const authPageBg = "#F7FAFC";
 export const authPlaceholder = "#808080";
 export const authFieldBorder = "rgba(0,0,0,0.05)";
+
+const heroExpanded = { height: 300, mascot: 318, margin: 12 };
+const heroCompact = { height: 188, mascot: 188, margin: 8 };
+const heroCollapsed = { height: 128, mascot: 132, margin: 4 };
+const heroCollapsedCompact = { height: 104, mascot: 108, margin: 2 };
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const AuthChromeContext = createContext({
+  collapse: () => {},
+  expand: () => {}
+});
+
+export const useAuthChrome = () => useContext(AuthChromeContext);
+
+const playChrome = (next: boolean, setOpen: (value: boolean) => void) => {
+  LayoutAnimation.configureNext({
+    duration: 220,
+    update: { type: LayoutAnimation.Types.easeInEaseOut }
+  });
+  setOpen(next);
+};
 
 export function AuthScreen({
   compact = false,
@@ -29,22 +67,44 @@ export function AuthScreen({
   children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const [collapsed, setCollapsed] = useState(false);
+  const open = compact ? heroCompact : heroExpanded;
+  const shut = compact ? heroCollapsedCompact : heroCollapsed;
+  const hero = collapsed ? shut : open;
+
+  useEffect(() => {
+    const hidden = Keyboard.addListener("keyboardDidHide", () => {
+      playChrome(false, setCollapsed);
+    });
+    return () => hidden.remove();
+  }, []);
+
   return (
-    <View style={[styles.screen, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-      <View style={compact ? styles.heroCompact : styles.hero}>
-        <LinearGradient colors={["#0878F9", "#599EEB"]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.heroFill} />
-        <Image source={loginMascot} resizeMode="contain" style={compact ? styles.mascotCompact : styles.mascot} />
+    <AuthChromeContext.Provider
+      value={{
+        collapse: () => playChrome(true, setCollapsed),
+        expand: () => playChrome(false, setCollapsed)
+      }}
+    >
+      <View style={[styles.screen, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <Pressable onPress={Keyboard.dismiss} style={[styles.hero, { height: hero.height, marginBottom: hero.margin }]}>
+          <LinearGradient colors={["#0878F9", "#599EEB"]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.heroFill} />
+          <Image source={loginMascot} resizeMode="contain" style={[styles.mascot, { height: hero.mascot }]} />
+        </Pressable>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.form}
+          >
+            <Pressable onPress={Keyboard.dismiss} style={styles.formDismiss}>
+              {children}
+            </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.form}
-        >
-          {children}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </View>
+    </AuthChromeContext.Provider>
   );
 }
 
@@ -59,11 +119,31 @@ export function FloatingField({
   trailing?: ReactNode;
   children: ReactNode;
 }) {
+  const chrome = useContext(AuthChromeContext);
+  const [focused, setFocused] = useState(false);
+  const field = isValidElement(children) ? (children as ReactElement<ComponentProps<typeof TextInput>>) : null;
+  const input = field
+    ? cloneElement(field, {
+        showSoftInputOnFocus: true,
+        underlineColorAndroid: "transparent",
+        selectionColor: colors.accent,
+        onFocus: (event) => {
+          field.props.onFocus?.(event);
+          setFocused(true);
+          chrome.collapse();
+        },
+        onBlur: (event) => {
+          field.props.onBlur?.(event);
+          setFocused(false);
+        }
+      })
+    : children;
+
   return (
     <View style={styles.fieldWrap}>
-      <View style={styles.field}>
+      <View style={[styles.field, focused ? styles.fieldFocused : null]}>
         {icon}
-        {children}
+        {input}
         {trailing}
       </View>
       <View style={styles.fieldLabel}>
@@ -124,7 +204,8 @@ export const authStyles = StyleSheet.create({
     lineHeight: 22,
     letterSpacing: 0.2,
     color: colors.text,
-    fontFamily: fonts.regular
+    fontFamily: fonts.regular,
+    ...inputReset
   },
   title: {
     color: colors.text,
@@ -136,7 +217,7 @@ export const authStyles = StyleSheet.create({
   },
   body: {
     color: colors.textMuted,
-    fontSize: 15,
+    fontSize: 12,
     lineHeight: 22,
     textAlign: "center",
     fontFamily: fonts.regular
@@ -185,12 +266,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   hero: {
-    height: 300,
-    marginBottom: 28
-  },
-  heroCompact: {
-    height: 188,
-    marginBottom: 20
+    overflow: "hidden"
   },
   heroFill: {
     position: "absolute",
@@ -207,21 +283,15 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: -6,
-    height: 318,
-    width: "100%"
-  },
-  mascotCompact: {
-    position: "absolute",
-    alignSelf: "center",
-    left: 0,
-    right: 0,
-    bottom: -4,
-    height: 188,
     width: "100%"
   },
   form: {
     flexGrow: 1,
     paddingHorizontal: 25,
+    paddingTop: 20
+  },
+  formDismiss: {
+    flexGrow: 1,
     gap: 16
   },
   fieldWrap: {
@@ -238,6 +308,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12
+  },
+  fieldFocused: {
+    borderColor: "rgba(16, 42, 76, 0.12)"
   },
   fieldLabel: {
     position: "absolute",

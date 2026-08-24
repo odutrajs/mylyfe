@@ -121,7 +121,15 @@
           "faceIDPermission": "O Zelo usa o Face ID so se voce ativar protecao extra do acesso."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "color": "#0878F9",
+          "defaultChannel": "reminders",
+          "enableBackgroundRemoteNotifications": false
+        }
+      ]
     ],
     "extra": {
       "privacyPolicyUrl": "https://feedeo.com.br/privacidade.html",
