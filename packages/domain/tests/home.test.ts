@@ -3,16 +3,20 @@ import {
   applyShoppingCommand,
   applyShoppingInboxToPlan,
   classifyShoppingSector,
+  clearBoughtShoppingItems,
   createEmptyPlan,
   findShoppingListByGroupJid,
   formatShoppingItem,
   formatShoppingListReply,
+  groupShoppingPurchasesByDay,
   linkShoppingListGroup,
   normalizeHomeModuleState,
   normalizeWhatsappGroupJid,
   parseShoppingCommand,
   setShoppingItemSector,
-  setShoppingItemStatus
+  setShoppingItemStatus,
+  shoppingPurchasesInMonth,
+  summarizeShoppingPurchases
 } from "../src/index.js";
 
 describe("shopping command parser", () => {
@@ -168,6 +172,59 @@ describe("home module on the plan", () => {
     const itemId = added.plan.home.lists[0]?.items[0]?.id ?? "";
     const bought = setShoppingItemStatus(added.plan, "mercado", itemId, "bought");
     expect(bought.home.lists[0]?.items[0]?.status).toBe("bought");
+  });
+
+  it("keeps a monthly history of bought items", () => {
+    const now = new Date("2026-08-15T18:00:00.000-03:00");
+    const added = applyShoppingInboxToPlan(createEmptyPlan("test"), "mercado", "2 leite", {}, now);
+    const itemId = added.plan.home.lists[0]?.items[0]?.id ?? "";
+    const bought = setShoppingItemStatus(added.plan, "mercado", itemId, "bought", now);
+
+    expect(bought.home.purchases).toHaveLength(1);
+    expect(bought.home.purchases[0]?.name).toBe("Leite");
+    expect(shoppingPurchasesInMonth(bought.home, "2026-08")).toHaveLength(1);
+    expect(shoppingPurchasesInMonth(bought.home, "2026-07")).toHaveLength(0);
+
+    const reopened = setShoppingItemStatus(bought, "mercado", itemId, "open", now);
+    expect(reopened.home.purchases).toHaveLength(0);
+
+    const boughtAgain = setShoppingItemStatus(reopened, "mercado", itemId, "bought", now);
+    const cleared = clearBoughtShoppingItems(boughtAgain, "mercado", now);
+    expect(cleared.home.lists[0]?.items).toHaveLength(0);
+    expect(cleared.home.purchases).toHaveLength(1);
+    expect(summarizeShoppingPurchases(cleared.home.purchases)).toEqual({ total: 1, unique: 1, days: 1 });
+    expect(groupShoppingPurchasesByDay(cleared.home.purchases)[0]?.day).toBe("2026-08-15");
+  });
+
+  it("records a WhatsApp buy into the monthly history", () => {
+    const now = new Date("2026-08-20T12:00:00.000-03:00");
+    const added = applyShoppingInboxToPlan(createEmptyPlan("test"), "mercado", "maionese", { name: "Taina" }, now);
+    const bought = applyShoppingInboxToPlan(added.plan, "mercado", "comprei maionese", { name: "Taina" }, now);
+    expect(bought.reply).toBe("Marquei Maionese.");
+    expect(bought.plan.home.purchases[0]?.name).toBe("Maionese");
+  });
+
+  it("backfills bought items from the list into purchases", () => {
+    const home = normalizeHomeModuleState({
+      lists: [
+        {
+          id: "mercado",
+          name: "Mercado",
+          items: [
+            {
+              id: "1",
+              name: "Vinagre",
+              status: "bought",
+              createdAt: "2026-08-10T00:00:00.000Z",
+              boughtAt: "2026-08-11T00:00:00.000Z"
+            }
+          ]
+        }
+      ],
+      updatedAt: "2026-08-11T00:00:00.000Z"
+    });
+    expect(home.purchases).toHaveLength(1);
+    expect(home.purchases[0]?.name).toBe("Vinagre");
   });
 
   it("normalizes a pasted group id", () => {

@@ -2,10 +2,20 @@ import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:cry
 import { promisify } from "node:util";
 import { isValidWhatsappPhone, normalizePhone, type FinancePlan } from "@mylyfe/domain";
 import type { PlanRepository } from "./repository.js";
-import { findPlanPeopleByPhone, isSameWhatsappOwner } from "./phone-verify-service.js";
 import {
+  confirmWhatsAppCode,
+  findPlanPeopleByPhone,
+  isSameWhatsappOwner,
+  issueWhatsAppCode,
+  personByEmailOrPrimary,
+  PhoneVerifyError
+} from "./phone-verify-service.js";
+import {
+  consumePasswordResetRecord,
+  createPasswordResetRecord,
   createSessionRecord,
   deleteSessionRecord,
+  deleteSessionsForUser,
   deleteUser,
   findSessionRecord,
   findUserByEmail,
@@ -187,6 +197,86 @@ export const registerUser = async (
   return issueSession(user);
 };
 
+const hintWhatsapp = (phone: string) => {
+  const local = phone.replace(/\D/g, "").replace(/^55/, "");
+  if (local.length < 10) return "";
+  return `${local.slice(0, 2)} ${local.slice(2, 3)}****-${local.slice(-4)}`;
+};
+
+export const startPasswordReset = async (repository: PlanRepository, input: { email?: string }) => {
+  const email = normalizeEmail(input.email ?? "");
+  const generic = { ok: true, phoneHint: "" };
+  if (!email.includes("@")) throw new AuthError("Informe um e-mail valido.");
+
+  const user = await findUserByEmail(email);
+  if (!user) return generic;
+
+  try {
+    const plan = await repository.get(user.personalPlanId || user.id);
+    const person = personByEmailOrPrimary(plan, email);
+    const phone = normalizePhone(person?.phone);
+    if (!person || !isValidWhatsappPhone(phone)) return generic;
+
+    await issueWhatsAppCode({
+      planId: plan.id,
+      personId: person.id,
+      phone,
+      text: "Seu codigo para redefinir a senha do Zelo e *{code}*. Vale por 10 minutos. Se nao foi voce, ignora."
+    });
+    return { ok: true, phoneHint: hintWhatsapp(phone) };
+  } catch (error) {
+    if (error instanceof PhoneVerifyError) throw new AuthError(error.message, error.status);
+    throw error;
+  }
+};
+
+export const confirmPasswordResetCode = async (repository: PlanRepository, input: { email?: string; code?: string }) => {
+  const email = normalizeEmail(input.email ?? "");
+  if (!email.includes("@")) throw new AuthError("Informe um e-mail valido.");
+
+  const user = await findUserByEmail(email);
+  if (!user) throw new AuthError("Codigo invalido ou vencido.");
+
+  try {
+    const plan = await repository.get(user.personalPlanId || user.id);
+    const person = personByEmailOrPrimary(plan, email);
+    await confirmWhatsAppCode({ phone: person?.phone, code: input.code });
+    const resetToken = randomBytes(32).toString("hex");
+    await createPasswordResetRecord({
+      token: resetToken,
+      userId: user.id,
+      email,
+      expiresAt: new Date(Date.now() + 1000 * 60 * 15).toISOString()
+    });
+    return { ok: true, email, resetToken };
+  } catch (error) {
+    if (error instanceof PhoneVerifyError) throw new AuthError(error.message, error.status);
+    throw error;
+  }
+};
+
+export const completePasswordReset = async (input: { token?: string; password?: string }) => {
+  const token = input.token?.trim() ?? "";
+  const password = input.password ?? "";
+  if (!token) throw new AuthError("Este passo expirou. Peca um codigo novo.");
+  if (password.length < 6) throw new AuthError("A senha precisa ter pelo menos 6 caracteres.");
+
+  const record = await consumePasswordResetRecord(token);
+  if (!record) throw new AuthError("Este passo expirou. Peca um codigo novo.");
+
+  const user = await findUserById(record.userId);
+  if (!user) throw new AuthError("Nao encontramos esta conta.");
+
+  const secret = await hashPassword(password);
+  await saveUser({
+    ...user,
+    passwordSalt: secret.salt,
+    passwordHash: secret.passwordHash
+  });
+  await deleteSessionsForUser(user.id);
+  return { ok: true };
+};
+
 export const loginUser = async (input: { email?: string; password?: string }) => {
   const email = normalizeEmail(input.email ?? "");
   const password = input.password ?? "";
@@ -234,6 +324,32 @@ export const deleteUserAccount = async (repository: PlanRepository, header?: str
   const planId = current.user.personalPlanId || current.user.id;
   await repository.remove(planId);
   await deleteUser(current.user.id);
+};
+
+export const savePushToken = async (
+  header: string | undefined,
+  input: { token?: string; platform?: string }
+) => {
+  const current = await sessionFromToken(header);
+  const token = input.token?.trim() ?? "";
+  const platform = input.platform === "android" ? ("android" as const) : input.platform === "ios" ? ("ios" as const) : null;
+  if (!platform) throw new AuthError("Informe o aparelho.", 400);
+  if (!token.startsWith("ExponentPushToken[") && !token.startsWith("ExpoPushToken[")) {
+    throw new AuthError("Token de push invalido.", 400);
+  }
+
+  const now = new Date().toISOString();
+  const others = (current.user.pushTokens ?? []).filter((item) => item.token !== token);
+  const user = await saveUser({
+    ...current.user,
+    pushTokens: [{ token, platform, updatedAt: now }, ...others].slice(0, 8)
+  });
+
+  return {
+    ok: true,
+    token,
+    count: user.pushTokens?.length ?? 0
+  };
 };
 
 export const updateAuthSession = async (

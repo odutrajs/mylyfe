@@ -3,6 +3,7 @@ import {
   applyInbox,
   applyReplyToAlert,
   buildCycle,
+  completeAlertOccurrence,
   createLifeAlert,
   defaultSecretaryModuleState,
   defaultSecretarySettings,
@@ -109,6 +110,18 @@ describe("alert tick and conversation", () => {
     expect(result.alert.cycle.status).toBe("snoozed");
     expect(result.reply).toMatch(/lembro/i);
     expect(result.alert.cycle.snoozeUntil).toBeTruthy();
+  });
+
+  it("completes a one-off reminder and advances a daily one", () => {
+    const now = zonedDate(zone, 2026, 8, 18, 10);
+    const once = createLifeAlert({ title: "Mercado", kind: "one_off", frequency: "once", dueDate: "2026-08-18" }, now, zone);
+    expect(completeAlertOccurrence(once, now, zone).status).toBe("completed");
+
+    const daily = createLifeAlert({ title: "Remedio", kind: "habit", frequency: "daily", preferredHour: 8 }, zonedDate(zone, 2026, 8, 18, 7), zone);
+    const next = completeAlertOccurrence(daily, now, zone);
+    expect(next.status).toBe("active");
+    expect(next.cycle.status).toBe("scheduled");
+    expect(next.cycle.dueAt.startsWith("2026-08-19")).toBe(true);
   });
 
   it("marks as paid and opens the next monthly cycle", () => {

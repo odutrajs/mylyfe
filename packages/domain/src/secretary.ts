@@ -3,6 +3,7 @@ import type {
   AlertFrequency,
   AlertKind,
   AlertReplyIntent,
+  FinancePlan,
   LifeAlert,
   SecretaryModuleState,
   SecretaryOutboundKind,
@@ -502,6 +503,8 @@ const nextWakeTime = (now: Date, settings: SecretarySettings) => {
   return zonedDate(settings.timezone, next.year, next.month, next.day, settings.quietHoursEnd);
 };
 
+export const isRecurringAlert = (alert: Pick<LifeAlert, "frequency">) => alert.frequency !== "once";
+
 const cycleAfterCompletion = (alert: LifeAlert, now: Date, timeZone: string): LifeAlert => {
   if (alert.frequency === "once") {
     return {
@@ -515,8 +518,43 @@ const cycleAfterCompletion = (alert: LifeAlert, now: Date, timeZone: string): Li
   const seed = alert.frequency === "biweekly" ? addDays(from, 13) : from;
   return {
     ...alert,
+    status: "active",
     cycle: buildCycle(alert, seed.getTime() > now.getTime() ? seed : now, timeZone),
     updatedAt: now.toISOString()
+  };
+};
+
+export const completeAlertOccurrence = (
+  alert: LifeAlert,
+  now = new Date(),
+  timeZone = defaultSecretarySettings().timezone
+): LifeAlert => {
+  const marked: LifeAlert = {
+    ...alert,
+    cycle: {
+      ...alert.cycle,
+      status: "paid",
+      paidAt: now.toISOString()
+    }
+  };
+  const next = cycleAfterCompletion(marked, now, timeZone);
+  return pushEvent(next, {
+    at: now.toISOString(),
+    type: next.status === "completed" ? "paid" : "cycled",
+    message: next.status === "completed" ? "Concluido." : "Ocorrencia concluida. Proximo aviso agendado."
+  });
+};
+
+export const completePlanAlertOccurrence = (plan: FinancePlan, alertId: string, now = new Date()): FinancePlan => {
+  const secretary = normalizeSecretaryModuleState(plan.secretary);
+  const timeZone = secretary.settings.timezone || plan.routine?.settings.timezone || defaultSecretarySettings().timezone;
+  return {
+    ...plan,
+    secretary: {
+      ...secretary,
+      alerts: secretary.alerts.map((alert) => (alert.id === alertId ? completeAlertOccurrence(alert, now, timeZone) : alert)),
+      updatedAt: now.toISOString()
+    }
   };
 };
 

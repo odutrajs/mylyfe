@@ -144,6 +144,46 @@ export const sanitizePlanWhatsappIdentity = async (repository: PlanRepository, p
   };
 };
 
+export const issueWhatsAppCode = async (input: { planId: string; personId: string; phone: string; text: string }) => {
+  const phone = normalizePhone(input.phone);
+  if (!isValidWhatsappPhone(phone)) {
+    throw new PhoneVerifyError("Informe um WhatsApp valido com DDD. Ex: 41 99999-0000.");
+  }
+  const code = String(randomInt(100000, 1000000));
+  await upsertPhoneVerification({
+    planId: input.planId,
+    personId: input.personId,
+    phone,
+    code,
+    expiresAt: new Date(Date.now() + CODE_TTL_MS).toISOString(),
+    attempts: 0
+  });
+  await sendWhatsApp(phone, input.text.replace("{code}", code));
+  return { phone, expiresInMinutes: 10 };
+};
+
+export const confirmWhatsAppCode = async (input: { phone?: string; code?: string }) => {
+  const phone = normalizePhone(input.phone);
+  const code = extractVerificationCode(input.code ?? "");
+  if (!phone || !code) throw new PhoneVerifyError("Informe o WhatsApp e o codigo de 6 digitos.");
+
+  const pending = await findPhoneVerification(phone);
+  if (!pending || pending.code !== code) {
+    if (pending) {
+      const attempts = pending.attempts + 1;
+      if (attempts >= MAX_ATTEMPTS) {
+        await removePhoneVerification(phone);
+        throw new PhoneVerifyError("Codigo errado vezes demais. Pede um codigo novo.");
+      }
+      await upsertPhoneVerification({ ...pending, attempts });
+    }
+    throw new PhoneVerifyError("Codigo invalido ou vencido.");
+  }
+
+  await removePhoneVerification(phone);
+  return { planId: pending.planId, personId: pending.personId, phone };
+};
+
 const sendWhatsApp = async (to: string, text: string) => {
   const secretaryUrl = process.env.SECRETARY_URL ?? "http://localhost:3334";
   const token = process.env.SECRETARY_TOKEN ?? "dev-secretary-token";
@@ -199,21 +239,13 @@ export const startPhoneVerification = async (
     personalPlanId: input.personalPlanId
   };
   await releasePhoneFromOtherOwners(repository, phone, claim);
-
-  const code = String(randomInt(100000, 1000000));
-  await upsertPhoneVerification({
+  await savePersonPhone(repository, plan.id, person.id, { phone, whatsappVerifiedAt: undefined });
+  await issueWhatsAppCode({
     planId: plan.id,
     personId: person.id,
     phone,
-    code,
-    expiresAt: new Date(Date.now() + CODE_TTL_MS).toISOString(),
-    attempts: 0
+    text: "Seu codigo MyLyfe e *{code}*. Vale por 10 minutos. Se nao foi voce, ignora esta mensagem."
   });
-  await savePersonPhone(repository, plan.id, person.id, { phone, whatsappVerifiedAt: undefined });
-  await sendWhatsApp(
-    phone,
-    `Seu codigo MyLyfe e *${code}*. Vale por 10 minutos. Se nao foi voce, ignora esta mensagem.`
-  );
 
   return { phone, expiresInMinutes: 10 };
 };

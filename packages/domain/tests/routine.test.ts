@@ -16,6 +16,7 @@ import {
   toggleRoutineStepChild,
   toggleRoutineStepDone,
   upcomingTasks,
+  shiftWeekKey,
   weekDayKeys,
   zonedDayKey,
   type RoutineCalendarEvent,
@@ -294,5 +295,12 @@ describe("calendar grids", () => {
   it("fills a 6-week month grid", () => {
     expect(monthGridKeys("2026-08-18")).toHaveLength(42);
     expect(monthGridKeys("2026-08-18")[0]).toBe("2026-07-27");
+  });
+
+  it("moves week navigation to the first day of the target week", () => {
+    expect(shiftWeekKey("2026-08-23", 1)).toBe("2026-08-24");
+    expect(shiftWeekKey("2026-08-18", 1)).toBe("2026-08-24");
+    expect(shiftWeekKey("2026-08-23", -1)).toBe("2026-08-10");
+    expect(shiftWeekKey("2026-08-17", -1)).toBe("2026-08-10");
   });
 });

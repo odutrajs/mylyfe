@@ -2,6 +2,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+export type StoredPushToken = {
+  token: string;
+  platform: "ios" | "android";
+  updatedAt: string;
+};
+
 export type StoredUser = {
   id: string;
   email: string;
@@ -10,6 +16,7 @@ export type StoredUser = {
   passwordHash: string;
   personalPlanId: string;
   activePlanId: string;
+  pushTokens?: StoredPushToken[];
   createdAt: string;
   updatedAt: string;
 };
@@ -21,23 +28,32 @@ export type AuthSessionRecord = {
   expiresAt: string;
 };
 
+export type PasswordResetRecord = {
+  token: string;
+  userId: string;
+  email: string;
+  expiresAt: string;
+};
+
 type AuthStoreFile = {
   users: StoredUser[];
   sessions: AuthSessionRecord[];
+  passwordResets: PasswordResetRecord[];
 };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dataRoot = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.resolve(appRoot, "data");
 const storePath = path.resolve(dataRoot, "auth.json");
 
-const emptyStore = (): AuthStoreFile => ({ users: [], sessions: [] });
+const emptyStore = (): AuthStoreFile => ({ users: [], sessions: [], passwordResets: [] });
 
 const readStore = async (): Promise<AuthStoreFile> => {
   try {
     const stored = JSON.parse(await readFile(storePath, "utf8")) as Partial<AuthStoreFile>;
     return {
       users: stored.users ?? [],
-      sessions: stored.sessions ?? []
+      sessions: stored.sessions ?? [],
+      passwordResets: stored.passwordResets ?? []
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyStore();
@@ -73,6 +89,9 @@ const withLock = async <T>(fn: () => Promise<T>) => {
 
 const pruneSessions = (sessions: AuthSessionRecord[], now = Date.now()) =>
   sessions.filter((session) => Date.parse(session.expiresAt) > now);
+
+const prunePasswordResets = (resets: PasswordResetRecord[], now = Date.now()) =>
+  resets.filter((item) => Date.parse(item.expiresAt) > now);
 
 export const listUsers = async () => (await readStore()).users;
 
@@ -124,10 +143,31 @@ export const deleteSessionsForUser = async (userId: string) =>
     await writeStore(store);
   });
 
+export const createPasswordResetRecord = async (record: PasswordResetRecord) =>
+  withLock(async () => {
+    const store = await readStore();
+    store.passwordResets = prunePasswordResets(store.passwordResets).filter((item) => item.userId !== record.userId);
+    store.passwordResets.push(record);
+    await writeStore(store);
+    return record;
+  });
+
+export const consumePasswordResetRecord = async (token: string) =>
+  withLock(async () => {
+    if (!token) return undefined;
+    const store = await readStore();
+    const resets = prunePasswordResets(store.passwordResets);
+    const record = resets.find((item) => item.token === token);
+    store.passwordResets = resets.filter((item) => item.token !== token);
+    await writeStore(store);
+    return record;
+  });
+
 export const deleteUser = async (userId: string) =>
   withLock(async () => {
     const store = await readStore();
     store.users = store.users.filter((user) => user.id !== userId);
     store.sessions = pruneSessions(store.sessions).filter((session) => session.userId !== userId);
+    store.passwordResets = prunePasswordResets(store.passwordResets).filter((item) => item.userId !== userId);
     await writeStore(store);
   });

@@ -9,8 +9,11 @@ import {
   calculateGoalProjection,
   calculateIncomeCommitment,
   calculateIncomeMetrics,
+  calculateMonthExpenseLimit,
   calculateMonthlyCashFlow,
   calculateMonthlyCashFlowSeries,
+  listMonthIncomes,
+  removePlanEntry,
   calculateNominalReturn,
   calculatePatrimonyMetrics,
   calculateSavingsRate,
@@ -949,5 +952,89 @@ describe("financial domain calculations", () => {
 
     const series = calculateMonthlyCashFlowSeries(plan, new Date("2026-08-15T12:00:00.000Z"), 1, 1);
     expect(series.map((item) => item.month)).toEqual(["2026-07", "2026-08", "2026-09"]);
+  });
+
+  it("lists month incomes and adds extra income to the expense limit", () => {
+    const plan = {
+      ...basePlan(),
+      budget: {
+        ...basePlan().budget,
+        monthlyExpenseTarget: 8000
+      },
+      incomeSources: [
+        {
+          id: "salary",
+          name: "Salario",
+          type: "clt",
+          netAmount: 10000,
+          frequency: "monthly",
+          isRecurring: true,
+          stabilityScore: 8,
+          startDate: "2026-01-01"
+        }
+      ],
+      transactions: [
+        {
+          id: "bonus",
+          date: "2026-08-20",
+          merchant: "Freela",
+          amount: 1500,
+          type: "income",
+          audience: "personal",
+          nature: "extraordinary",
+          category: "other",
+          confidence: 1,
+          source: "manual",
+          reviewed: true
+        }
+      ]
+    } satisfies FinancePlan;
+
+    const incomes = listMonthIncomes(plan, "2026-08");
+    expect(incomes.map((item) => item.name)).toEqual(["Freela", "Salario"]);
+    expect(calculateMonthlyCashFlow(plan, "2026-08").income).toBe(11500);
+    expect(calculateMonthExpenseLimit(plan, "2026-08")).toBe(9500);
+  });
+
+  it("removes a statement income and its matching source", () => {
+    const plan = {
+      ...basePlan(),
+      budget: {
+        ...basePlan().budget,
+        monthlyExpenseTarget: 9400
+      },
+      incomeSources: [
+        {
+          id: "income-asteroid",
+          name: "Asteroid",
+          type: "other",
+          netAmount: 7400,
+          frequency: "monthly",
+          isRecurring: true,
+          stabilityScore: 5,
+          startDate: "2026-08-01"
+        }
+      ],
+      transactions: [
+        {
+          id: "tx-asteroid",
+          date: "2026-08-23",
+          merchant: "Asteroid",
+          amount: 7400,
+          type: "income",
+          audience: "personal",
+          nature: "recurring",
+          category: "other",
+          confidence: 1,
+          source: "manual",
+          reviewed: true
+        }
+      ]
+    } satisfies FinancePlan;
+
+    const next = removePlanEntry(plan, "tx-asteroid");
+    expect(next.transactions).toHaveLength(0);
+    expect(next.incomeSources).toHaveLength(0);
+    expect(next.budget.monthlyExpenseTarget).toBe(2000);
   });
 });

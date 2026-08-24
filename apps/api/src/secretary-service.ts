@@ -1,6 +1,7 @@
 import {
   applySecretaryInboxToPlan,
   applyShoppingInboxToPlan,
+  completeAlertOccurrence,
   createLifeAlert,
   extractVerificationCode,
   findShoppingListByGroupJid,
@@ -176,6 +177,19 @@ export const setAlertStatus = async (repository: PlanRepository, planId: string,
       ...current,
       alerts: current.alerts.map((alert) =>
         alert.id === alertId ? { ...alert, status, updatedAt: new Date().toISOString() } : alert
+      )
+    });
+  });
+
+export const completePlanAlert = async (repository: PlanRepository, planId: string, alertId: string) =>
+  withLock(planId, async () => {
+    const plan = await repository.get(planId);
+    const current = await readState(repository, planId);
+    const timeZone = current.settings.timezone || plan.routine?.settings.timezone || "America/Sao_Paulo";
+    return saveState(repository, planId, {
+      ...current,
+      alerts: current.alerts.map((alert) =>
+        alert.id === alertId ? completeAlertOccurrence(alert, new Date(), timeZone) : alert
       )
     });
   });

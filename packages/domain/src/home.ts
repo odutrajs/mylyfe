@@ -178,18 +178,71 @@ const normalizeList = (list: Partial<ShoppingList>, index: number, memory?: Shop
     .filter((item) => item.name)
 });
 
-const collectSectorMemory = (lists: ShoppingList[], memory: ShoppingSectorMemory): ShoppingSectorMemory => {
+const MAX_SHOPPING_PURCHASES = 400;
+
+const purchaseTime = (item: ShoppingItem) => Date.parse(item.boughtAt || item.createdAt) || 0;
+
+const sortPurchases = (purchases: ShoppingItem[]) =>
+  [...purchases].sort((left, right) => purchaseTime(right) - purchaseTime(left));
+
+const trimPurchases = (purchases: ShoppingItem[]) => sortPurchases(purchases).slice(0, MAX_SHOPPING_PURCHASES);
+
+const rememberPurchase = (purchases: ShoppingItem[], item: ShoppingItem, now: Date) => {
+  const recorded: ShoppingItem = {
+    ...item,
+    status: "bought",
+    boughtAt: item.boughtAt || now.toISOString()
+  };
+  return trimPurchases([recorded, ...purchases.filter((entry) => entry.id !== recorded.id)]);
+};
+
+const forgetPurchase = (purchases: ShoppingItem[], itemId: string) =>
+  purchases.filter((entry) => entry.id !== itemId);
+
+const collectSectorMemory = (
+  lists: ShoppingList[],
+  purchases: ShoppingItem[],
+  memory: ShoppingSectorMemory
+): ShoppingSectorMemory => {
   let next = memory;
   for (const list of lists) {
     for (const item of list.items) {
       next = rememberShoppingSector(next, item.name, item.sector);
     }
   }
+  for (const item of purchases) {
+    next = rememberShoppingSector(next, item.name, item.sector);
+  }
   return next;
+};
+
+const normalizePurchases = (
+  purchases: Array<Partial<ShoppingItem>> | undefined,
+  lists: ShoppingList[],
+  memory?: ShoppingSectorMemory
+) => {
+  const fromHistory = (purchases ?? [])
+    .map((item, index, siblings) => normalizeItem(item, index, memory, siblings))
+    .filter((item) => item.name)
+    .map((item) => ({
+      ...item,
+      status: "bought" as const,
+      boughtAt: item.boughtAt || item.createdAt
+    }));
+  const known = new Set(fromHistory.map((item) => item.id));
+  const fromLists = lists
+    .flatMap((list) => list.items.filter((item) => item.status === "bought"))
+    .filter((item) => !known.has(item.id))
+    .map((item) => ({
+      ...item,
+      boughtAt: item.boughtAt || item.createdAt
+    }));
+  return trimPurchases([...fromHistory, ...fromLists]);
 };
 
 export const defaultHomeModuleState = (): HomeModuleState => ({
   lists: [defaultShoppingList()],
+  purchases: [],
   sectorMemory: {},
   updatedAt: defaultUpdatedAt
 });
@@ -203,9 +256,11 @@ export const normalizeHomeModuleState = (state?: Partial<HomeModuleState> | null
   if (!lists.some((list) => list.id === DEFAULT_SHOPPING_LIST_ID)) {
     lists.unshift(defaultShoppingList());
   }
+  const purchases = normalizePurchases(state?.purchases, lists, sectorMemory);
   return {
     lists,
-    sectorMemory: collectSectorMemory(lists, sectorMemory),
+    purchases,
+    sectorMemory: collectSectorMemory(lists, purchases, sectorMemory),
     updatedAt: asString(state?.updatedAt) || defaultUpdatedAt
   };
 };
@@ -385,10 +440,21 @@ export const applyShoppingInboxToPlan = (
     command.kind === "add"
       ? result.list.items.find((item) => !list.items.some((current) => current.id === item.id))
       : undefined;
+  const newlyBought =
+    command.kind === "buy"
+      ? result.list.items.filter(
+          (item) => item.status === "bought" && !list.items.some((current) => current.id === item.id && current.status === "bought")
+        )
+      : [];
   const sectorMemory = added ? rememberShoppingSector(home.sectorMemory, added.name, added.sector) : home.sectorMemory;
 
   return {
-    plan: withList(plan, listId, now, () => result.list, sectorMemory),
+    plan: withHome(plan, now, (current) => ({
+      ...current,
+      lists: current.lists.map((entry) => (entry.id === listId ? result.list : entry)),
+      sectorMemory,
+      purchases: newlyBought.reduce((purchases, item) => rememberPurchase(purchases, item, now), current.purchases)
+    })),
     reply: result.reply,
     ignored: false as const,
     listId,
@@ -403,18 +469,25 @@ export const setShoppingItemStatus = (
   status: ShoppingItemStatus,
   now = new Date()
 ) =>
-  withList(plan, listId, now, (list) => ({
-    ...list,
-    items: list.items.map((item) =>
-      item.id === itemId
-        ? {
-            ...item,
-            status,
-            boughtAt: status === "bought" ? now.toISOString() : undefined
-          }
-        : item
-    )
-  }));
+  withHome(plan, now, (home) => {
+    const current = home.lists.find((list) => list.id === listId)?.items.find((item) => item.id === itemId);
+    if (!current) return home;
+    const nextItem: ShoppingItem = {
+      ...current,
+      status,
+      boughtAt: status === "bought" ? now.toISOString() : undefined
+    };
+    return {
+      ...home,
+      lists: home.lists.map((list) =>
+        list.id === listId
+          ? { ...list, items: list.items.map((item) => (item.id === itemId ? nextItem : item)) }
+          : list
+      ),
+      purchases:
+        status === "bought" ? rememberPurchase(home.purchases, nextItem, now) : forgetPurchase(home.purchases, itemId)
+    };
+  });
 
 export const updateShoppingItemQuantity = (
   plan: FinancePlan,
@@ -458,10 +531,55 @@ export const removeShoppingItem = (plan: FinancePlan, listId: string, itemId: st
   }));
 
 export const clearBoughtShoppingItems = (plan: FinancePlan, listId: string, now = new Date()) =>
-  withList(plan, listId, now, (list) => ({
-    ...list,
-    items: list.items.filter((item) => item.status !== "bought")
-  }));
+  withHome(plan, now, (home) => {
+    const list = home.lists.find((entry) => entry.id === listId);
+    if (!list) return home;
+    const bought = list.items.filter((item) => item.status === "bought");
+    if (!bought.length) return home;
+    return {
+      ...home,
+      lists: home.lists.map((entry) =>
+        entry.id === listId ? { ...entry, items: entry.items.filter((item) => item.status !== "bought") } : entry
+      ),
+      purchases: bought.reduce((purchases, item) => rememberPurchase(purchases, item, now), home.purchases)
+    };
+  });
+
+export const shoppingPurchaseDayKey = (item: Pick<ShoppingItem, "boughtAt" | "createdAt">) => {
+  const raw = item.boughtAt || item.createdAt;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw.slice(0, 10);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+export const shoppingPurchasesInMonth = (state: Partial<HomeModuleState> | null | undefined, month: string) => {
+  const home = normalizeHomeModuleState(state);
+  return sortPurchases(home.purchases.filter((item) => shoppingPurchaseDayKey(item).startsWith(month)));
+};
+
+export const shoppingPurchaseMonths = (state: Partial<HomeModuleState> | null | undefined) => {
+  const months = new Set(
+    normalizeHomeModuleState(state).purchases.map((item) => shoppingPurchaseDayKey(item).slice(0, 7)).filter(Boolean)
+  );
+  return [...months].sort().reverse();
+};
+
+export const groupShoppingPurchasesByDay = (items: ShoppingItem[]) => {
+  const groups = new Map<string, ShoppingItem[]>();
+  for (const item of sortPurchases(items)) {
+    const day = shoppingPurchaseDayKey(item);
+    const current = groups.get(day) ?? [];
+    current.push(item);
+    groups.set(day, current);
+  }
+  return [...groups.entries()].map(([day, dayItems]) => ({ day, items: dayItems }));
+};
+
+export const summarizeShoppingPurchases = (items: ShoppingItem[]) => ({
+  total: items.length,
+  unique: new Set(items.map((item) => itemKey(item.name))).size,
+  days: new Set(items.map((item) => shoppingPurchaseDayKey(item))).size
+});
 
 export const linkShoppingListGroup = (plan: FinancePlan, listId: string, groupJid: string, now = new Date()) =>
   withList(plan, listId, now, (list) => ({

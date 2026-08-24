@@ -2,14 +2,17 @@ import "./load-env.js";
 import {
   analyzePlan,
   buildMonthlySnapshot,
+  buildSpendCoachBrief,
   createRuleFromCorrection,
+  formatMonthKey,
   isWorkspaceAdmin,
   lifeModulePlanId,
   type FinancePlan,
   type FinancialTransaction,
   type LifeAlert,
   type RoutineModuleState,
-  type SecretarySettings
+  type SecretarySettings,
+  type SpendCoachMessage
 } from "@mylyfe/domain";
 import cors from "cors";
 import express from "express";
@@ -20,9 +23,13 @@ import { dedupeTransactions, findDuplicateStatementImport, parseCsvStatement, pa
 import {
   AuthError,
   deleteUserAccount,
+  completePasswordReset,
+  confirmPasswordResetCode,
   loginUser,
   logoutUser,
   registerUser,
+  startPasswordReset,
+  savePushToken,
   sessionFromToken,
   updateAuthSession
 } from "./auth-service.js";
@@ -35,10 +42,12 @@ import {
   pendingSecretaryJobs,
   savePlanSecretarySettings,
   secretarySnapshot,
+  completePlanAlert,
   setAlertStatus,
   tickSecretary,
   upsertPlanAlert
 } from "./secretary-service.js";
+import { runSpendCoach } from "./spend-coach-ai.js";
 import {
   finishGoogleConnect,
   finishMicrosoftConnect,
@@ -213,6 +222,66 @@ app.patch(
 );
 
 app.post(
+  "/api/auth/push-token",
+  asyncRoute(async (request, response) => {
+    try {
+      response.json(await savePushToken(request.headers.authorization, request.body as { token?: string; platform?: string }));
+    } catch (error) {
+      if (error instanceof AuthError) {
+        response.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/auth/password/forgot",
+  asyncRoute(async (request, response) => {
+    try {
+      response.json(await startPasswordReset(repository, request.body as { email?: string }));
+    } catch (error) {
+      if (error instanceof AuthError) {
+        response.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/auth/password/verify",
+  asyncRoute(async (request, response) => {
+    try {
+      response.json(await confirmPasswordResetCode(repository, request.body as { email?: string; code?: string }));
+    } catch (error) {
+      if (error instanceof AuthError) {
+        response.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/auth/password/reset",
+  asyncRoute(async (request, response) => {
+    try {
+      response.json(await completePasswordReset(request.body as { token?: string; password?: string }));
+    } catch (error) {
+      if (error instanceof AuthError) {
+        response.status(error.status).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+  })
+);
+
+app.post(
   "/api/auth/logout",
   asyncRoute(async (request, response) => {
     await logoutUser(request.headers.authorization);
@@ -261,6 +330,27 @@ app.get(
   asyncRoute(async (request, response) => {
     const plan = await repository.get(routeParam(request.params.id, "primary"));
     response.json(analyzePlan(plan));
+  })
+);
+
+app.post(
+  "/api/plans/:id/spend-coach",
+  asyncRoute(async (request, response) => {
+    const plan = await repository.get(routeParam(request.params.id, "primary"));
+    const body = (request.body ?? {}) as { month?: string; messages?: SpendCoachMessage[] };
+    const month = body.month && /^\d{4}-\d{2}$/.test(body.month) ? body.month : formatMonthKey(new Date());
+    const messages = Array.isArray(body.messages)
+      ? body.messages.filter(
+          (item): item is SpendCoachMessage =>
+            Boolean(item) &&
+            (item.role === "user" || item.role === "assistant") &&
+            typeof item.content === "string" &&
+            item.content.trim().length > 0
+        )
+      : [];
+    const brief = buildSpendCoachBrief(plan, month);
+    const turn = await runSpendCoach(brief, messages);
+    response.json(turn);
   })
 );
 
@@ -380,6 +470,13 @@ app.post(
       return;
     }
     response.json(await setAlertStatus(repository, routeParam(request.params.id, "primary"), routeParam(request.params.alertId, ""), status));
+  })
+);
+
+app.post(
+  "/api/plans/:id/alerts/:alertId/complete",
+  asyncRoute(async (request, response) => {
+    response.json(await completePlanAlert(repository, routeParam(request.params.id, "primary"), routeParam(request.params.alertId, "")));
   })
 );
 

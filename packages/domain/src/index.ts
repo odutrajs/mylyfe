@@ -10,3 +10,4 @@ export * from "./secretary-intent.js";
 export * from "./health.js";
 export * from "./shopping-sector.js";
 export * from "./home.js";
+export * from "./spend-coach.js";

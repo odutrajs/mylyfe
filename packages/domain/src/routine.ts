@@ -464,6 +464,11 @@ export const weekDayKeys = (dayKey: string, weekStartsOn = 1) => {
   return Array.from({ length: 7 }, (_, index) => addDaysToKey(dayKey, index - offset));
 };
 
+export const weekStartKey = (dayKey: string, weekStartsOn = 1) => weekDayKeys(dayKey, weekStartsOn)[0] ?? dayKey;
+
+export const shiftWeekKey = (dayKey: string, weeks: number, weekStartsOn = 1) =>
+  addDaysToKey(weekStartKey(dayKey, weekStartsOn), weeks * 7);
+
 export const monthGridKeys = (dayKey: string, weekStartsOn = 1) => {
   const { year, month } = parseDayKey(dayKey);
   const first = `${year}-${padDayPart(month)}-01`;

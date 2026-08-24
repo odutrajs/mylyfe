@@ -375,6 +375,7 @@ export interface ShoppingList {
 
 export interface HomeModuleState {
   lists: ShoppingList[];
+  purchases: ShoppingItem[];
   sectorMemory: ShoppingSectorMemory;
   updatedAt: string;
 }
@@ -811,6 +812,15 @@ export interface CategoryExpenseItem {
     current: number;
     total: number;
   };
+}
+
+export interface MonthIncomeItem {
+  id: string;
+  name: string;
+  amount: number;
+  date?: string;
+  kind: "transaction" | "recurring";
+  type?: IncomeType;
 }
 
 export interface PurchaseSimulation {

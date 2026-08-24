@@ -21,6 +21,7 @@ import type {
   IncomeMetrics,
   IncomeSource,
   IndependenceScenario,
+  MonthIncomeItem,
   InvestmentCapacity,
   MonthCommitment,
   MonthlyCashFlow,
@@ -112,14 +113,21 @@ export const calculateRealReturn = (nominalReturn: number, inflationRate: number
 
 export const monthlyizeIncome = (source: IncomeSource) => roundMoney(positive(source.netAmount) * frequencyToMonthlyFactor(source));
 
+const isIncomeTransaction = (transaction: FinancialTransaction) =>
+  transaction.type === "income" && transaction.audience === "personal";
+
+const isMonthIncomeTransaction = (transaction: FinancialTransaction, month: string) =>
+  isIncomeTransaction(transaction) &&
+  transaction.nature !== "recurring" &&
+  spendingMonthKey(transaction) === month;
+
 const isExtraordinaryIncomeTransaction = (transaction: FinancialTransaction, asOf: Date) => {
   const date = parseDate(transaction.date);
   return Boolean(
     date &&
       date.getFullYear() === asOf.getFullYear() &&
-      transaction.type === "income" &&
-      transaction.audience === "personal" &&
-      transaction.nature === "extraordinary"
+      isIncomeTransaction(transaction) &&
+      transaction.nature !== "recurring"
   );
 };
 
@@ -557,7 +565,7 @@ export const calculateMonthlyCashFlow = (plan: FinancePlan, month: string): Mont
   const asOf = dateFromMonthKey(month);
   const recurringIncome = calculateIncomeMetrics(plan, asOf).recurringMonthly;
   const extraIncome = plan.transactions
-    .filter((transaction) => spendingMonthKey(transaction) === month && transaction.type === "income" && transaction.nature === "extraordinary")
+    .filter((transaction) => isMonthIncomeTransaction(transaction, month))
     .reduce((sum, transaction) => sum + Math.abs(finite(transaction.amount)), 0);
   const snapshot = calculateCashFlowSnapshot(plan, asOf);
   const income = roundMoney(recurringIncome + extraIncome);
@@ -574,6 +582,112 @@ export const calculateMonthlyCashFlowSeries = (plan: FinancePlan, asOf = new Dat
   Array.from({ length: pastMonths + futureMonths + 1 }, (_, index) =>
     calculateMonthlyCashFlow(plan, shiftMonthKey(asOf, index - pastMonths))
   );
+
+export const listMonthIncomes = (plan: FinancePlan, month: string): MonthIncomeItem[] => {
+  const asOf = dateFromMonthKey(month);
+  const sources = plan.incomeSources
+    .filter((source) => isActiveOn(source, asOf))
+    .flatMap((source) => {
+      const monthly = monthlyizeIncome(source);
+      const oneOff = monthly <= 0 && source.startDate?.slice(0, 7) === month ? positive(source.netAmount) : 0;
+      const amount = monthly > 0 ? monthly : oneOff;
+      if (amount <= 0) return [];
+      return [
+        {
+          id: `income-${source.id}`,
+          name: source.name || "Entrada",
+          amount,
+          date: source.startDate && source.startDate.slice(0, 7) === month ? source.startDate : `${month}-01`,
+          kind: monthly > 0 ? ("recurring" as const) : ("transaction" as const),
+          type: source.type
+        }
+      ];
+    });
+
+  const extras = plan.transactions
+    .filter((transaction) => isIncomeTransaction(transaction) && spendingMonthKey(transaction) === month)
+    .map((transaction) => ({
+      id: transaction.id,
+      name: transaction.merchant || "Entrada",
+      amount: Math.abs(finite(transaction.amount)),
+      date: transaction.date,
+      kind: "transaction" as const
+    }));
+  const listedNames = new Set(extras.map((item) => item.name.trim().toLowerCase()));
+  const uncoveredSources = sources.filter((item) => !listedNames.has(item.name.trim().toLowerCase()));
+
+  return [...uncoveredSources, ...extras].sort(
+    (left, right) => (right.date ?? "").localeCompare(left.date ?? "") || right.amount - left.amount
+  );
+};
+
+export const calculateMonthExpenseLimit = (plan: FinancePlan, month: string) => {
+  const asOf = dateFromMonthKey(month);
+  const flow = calculateMonthlyCashFlow(plan, month);
+  const budgetPlan = calculateCategoryBudgetPlan(plan, asOf);
+  const configured = positive(plan.budget.monthlyExpenseTarget);
+  const extraIncome = roundMoney(Math.max(0, flow.income - budgetPlan.income));
+  return roundMoney((configured || budgetPlan.expenseEnvelope) + extraIncome);
+};
+
+const sameMoney = (left: number, right: number) => Math.abs(finite(left) - finite(right)) < 0.009;
+const sameLabel = (left?: string, right?: string) => (left ?? "").trim().toLowerCase() === (right ?? "").trim().toLowerCase();
+
+const dropMatchingIncomeSource = (plan: FinancePlan, name: string, amount: number) => {
+  const match = plan.incomeSources.find((source) => sameLabel(source.name, name) && sameMoney(source.netAmount, amount));
+  if (!match) return plan;
+  const configured = positive(plan.budget.monthlyExpenseTarget);
+  const nextTarget = match.isRecurring && configured > 0 ? roundMoney(Math.max(0, configured - monthlyizeIncome(match))) : plan.budget.monthlyExpenseTarget;
+  return {
+    ...plan,
+    incomeSources: plan.incomeSources.filter((source) => source.id !== match.id),
+    budget: nextTarget === plan.budget.monthlyExpenseTarget ? plan.budget : { ...plan.budget, monthlyExpenseTarget: nextTarget }
+  };
+};
+
+export const removePlanEntry = (plan: FinancePlan, entryId: string): FinancePlan => {
+  const transaction = plan.transactions.find((item) => item.id === entryId);
+  const recurringId = entryId.startsWith("rec-") ? entryId.slice(4) : "";
+  const recurring = recurringId ? plan.recurringTransactions.find((item) => item.id === recurringId) : undefined;
+  const incomeSource = plan.incomeSources.find((item) => item.id === entryId || `income-${item.id}` === entryId);
+  const updatedAt = new Date().toISOString();
+
+  if (transaction) {
+    const next = {
+      ...plan,
+      transactions: plan.transactions.filter((item) => item.id !== transaction.id),
+      updatedAt
+    };
+    if (transaction.type !== "income") return next;
+    return { ...dropMatchingIncomeSource(next, transaction.merchant, Math.abs(finite(transaction.amount))), updatedAt };
+  }
+
+  if (incomeSource) {
+    const amount = monthlyizeIncome(incomeSource) || positive(incomeSource.netAmount);
+    const next = dropMatchingIncomeSource(plan, incomeSource.name, incomeSource.netAmount);
+    const companion = next.transactions.find(
+      (item) =>
+        item.type === "income" &&
+        sameLabel(item.merchant, incomeSource.name) &&
+        sameMoney(Math.abs(finite(item.amount)), incomeSource.netAmount || amount)
+    );
+    return {
+      ...next,
+      transactions: companion ? next.transactions.filter((item) => item.id !== companion.id) : next.transactions,
+      updatedAt
+    };
+  }
+
+  if (recurring) {
+    return {
+      ...plan,
+      recurringTransactions: plan.recurringTransactions.filter((item) => item.id !== recurring.id),
+      updatedAt
+    };
+  }
+
+  return plan;
+};
 
 const ignoredBudgetCategories = new Set(["investments", "company", "thirdParty"]);
 
