@@ -154,7 +154,12 @@ export function HomeView({
           </button>
         </form>
 
-        {openItems.length === 0 && <p className="panel-note">Nada pendente. Mande “maionese” no grupo ou adicione aqui.</p>}
+        {openItems.length === 0 && (
+          <div className="empty-state">
+            <span>Nada pendente</span>
+            <small>Mande “maionese” no grupo ou adicione aqui.</small>
+          </div>
+        )}
 
         <div className="shopping-list">
           {openSectors.map((group) => (

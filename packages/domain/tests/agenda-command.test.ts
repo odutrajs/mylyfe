@@ -3,7 +3,9 @@ import {
   expandAgendaDates,
   looksLikeAgendaCommand,
   looksLikeIncompleteAgendaCommand,
-  parseAgendaCommand
+  looksLikeReminderCommand,
+  parseAgendaCommand,
+  parseReminderCommand
 } from "../src/index.js";
 
 const zone = "America/Sao_Paulo";
@@ -51,6 +53,22 @@ describe("agenda command parsing", () => {
     expect(looksLikeIncompleteAgendaCommand("tenho reuniao com pedro")).toBe(true);
     expect(looksLikeAgendaCommand("tenho reuniao com pedro")).toBe(false);
     expect(parseAgendaCommand("tenho reuniao com pedro", now, zone)).toBeNull();
+  });
+
+  it("does not treat reminder phrases as agenda commands", () => {
+    expect(looksLikeReminderCommand("me lembra de pagar a luz amanha as 9h")).toBe(true);
+    expect(looksLikeAgendaCommand("me lembra de pagar a luz amanha as 9h")).toBe(false);
+    expect(looksLikeAgendaCommand("criar lembrete de pagar o ipva amanha as 10h")).toBe(false);
+    expect(looksLikeAgendaCommand("pagar a internet amanha as 9h")).toBe(false);
+
+    const parsed = parseReminderCommand("me lembra de pagar a luz amanha as 9h", now, zone);
+    expect(parsed).toMatchObject({
+      title: expect.stringMatching(/luz/i),
+      kind: "bill",
+      frequency: "once",
+      dueDate: "2026-08-19",
+      preferredHour: 9
+    });
   });
 
   it("does not treat bill replies or passive consulta phrases as agenda commands", () => {

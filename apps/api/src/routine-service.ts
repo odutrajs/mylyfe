@@ -572,8 +572,8 @@ export const syncRoutineCalendars = async (repository: PlanRepository, planId: s
   const links = enabledLinks(state);
   const connections = await listConnections(planId);
   if (!links.length) {
-    const empty = await writeEventCache(planId, []);
-    return { events: empty.events, syncedAt: empty.syncedAt, connections: connections.map(publicConnection) };
+    const cache = await readEventCache(planId);
+    return { events: cache.events, syncedAt: cache.syncedAt, connections: connections.map(publicConnection) };
   }
 
   const from = new Date();
@@ -677,6 +677,34 @@ export const listRoutineEvents = async (planId: string, from?: string, to?: stri
   return {
     events,
     syncedAt: cache.syncedAt
+  };
+};
+
+const calendarCacheStaleMs = 2 * 60 * 1000;
+
+export const loadRoutineCalendarSnapshot = async (
+  repository: PlanRepository,
+  planId: string,
+  options?: { sync?: boolean }
+) => {
+  const [connections, cache] = await Promise.all([listConnections(planId), readEventCache(planId)]);
+  const syncedAtMs = cache.syncedAt ? Date.parse(cache.syncedAt) : Number.NaN;
+  const stale = !Number.isFinite(syncedAtMs) || Date.now() - syncedAtMs > calendarCacheStaleMs;
+  if (connections.length && (options?.sync || stale)) {
+    try {
+      return await syncRoutineCalendars(repository, planId);
+    } catch {
+      return {
+        events: cache.events,
+        syncedAt: cache.syncedAt,
+        connections: connections.map(publicConnection)
+      };
+    }
+  }
+  return {
+    events: cache.events,
+    syncedAt: cache.syncedAt,
+    connections: connections.map(publicConnection)
   };
 };
 

@@ -197,6 +197,51 @@ describe("secretary intent json", () => {
     expect(inbox.plan.transactions[0]?.category).toBe("transport");
   });
 
+  it("creates a reminder instead of an agenda event", () => {
+    const inbox = applySecretaryInboxToPlan(
+      createEmptyPlan("test"),
+      "me lembra de pagar a luz amanhã às 9h",
+      morning,
+      "Thiago"
+    );
+    expect(inbox.reply).toMatch(/lembrete/i);
+    expect(inbox.reply).toMatch(/luz/i);
+    expect(inbox.plan.routine.localEvents).toHaveLength(0);
+    expect(inbox.plan.health.appointments).toHaveLength(0);
+    expect(inbox.plan.secretary.alerts[0]).toMatchObject({
+      title: expect.stringMatching(/luz/i),
+      kind: "bill",
+      frequency: "once"
+    });
+  });
+
+  it("does not let the AI turn a reminder into an agenda event", () => {
+    const inbox = applySecretaryInboxToPlan(
+      createEmptyPlan("test"),
+      "criar lembrete de renovar a receita amanhã às 8h",
+      morning,
+      "Thiago",
+      [{ type: "book_event", title: "Renovar a receita", time: "08:00", date: "2026-08-21" }]
+    );
+    expect(inbox.plan.routine.localEvents).toHaveLength(0);
+    expect(inbox.plan.secretary.alerts[0]).toMatchObject({
+      title: expect.stringMatching(/receita/i),
+      kind: "document"
+    });
+    expect(inbox.reply).toMatch(/lembrete/i);
+  });
+
+  it("keeps meetings on the agenda even if the user says me lembra", () => {
+    const inbox = applySecretaryInboxToPlan(
+      createEmptyPlan("test"),
+      "me lembra da reunião com a ana amanhã às 15:00",
+      morning,
+      "Thiago"
+    );
+    expect(inbox.plan.routine.localEvents[0]?.title).toMatch(/Reunião/i);
+    expect(inbox.plan.secretary.alerts.some((alert) => alert.kind === "bill")).toBe(false);
+  });
+
   it("keeps secretary-created events when another copy of the agenda is stale", () => {
     const merged = mergeRoutineLocalEvents(
       [{ id: "old", source: "manual", title: "Daily", start: "2026-08-20T13:00:00.000Z", end: "2026-08-20T14:00:00.000Z", allDay: false }],

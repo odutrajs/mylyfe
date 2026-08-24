@@ -42,6 +42,7 @@ export type PublicSession = {
   personalPlanId: string;
   name: string;
   email: string;
+  hasPushToken: boolean;
 };
 
 export type AuthResult = {
@@ -82,7 +83,8 @@ const toPublicSession = (user: StoredUser): PublicSession => ({
   planId: user.activePlanId || user.personalPlanId,
   personalPlanId: user.personalPlanId,
   name: user.name,
-  email: user.email
+  email: user.email,
+  hasPushToken: (user.pushTokens?.length ?? 0) > 0
 });
 
 const issueSession = async (user: StoredUser): Promise<AuthResult> => {

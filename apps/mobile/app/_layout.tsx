@@ -9,11 +9,13 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Platform, Text, TextInput, View } from "react-native";
 import { AuthProvider, useAuth } from "../src/auth-context";
 import { SplashOverlay } from "../src/components/BootSplash";
+import { ReminderNotifications } from "../src/components/ReminderNotifications";
+import { useOnboardingSeen } from "../src/onboarding";
 import { PlanProvider, usePlan } from "../src/plan-context";
-import { colors, fonts } from "../src/theme";
+import { colors, fonts, inputReset } from "../src/theme";
 import { UIProvider } from "../src/ui-context";
 
 void SplashScreen.preventAutoHideAsync();
@@ -24,6 +26,7 @@ const whatsappAuthScreens = new Set(["confirm-whatsapp", "skip-whatsapp", "whats
 
 function Gate({ children }: { children: ReactNode }) {
   const { ready, session, pendingSession } = useAuth();
+  const { ready: onboardingReady, seen: onboardingSeen } = useOnboardingSeen();
   const { plan, loading } = usePlan();
   const segments = useSegments();
   const router = useRouter();
@@ -31,19 +34,22 @@ function Gate({ children }: { children: ReactNode }) {
   const [hold, setHold] = useState(true);
 
   const waitingPlan = Boolean(ready && session && !plan && loading);
-  const bootReady = ready && !waitingPlan;
+  const bootReady = ready && onboardingReady && !waitingPlan;
 
   useEffect(() => {
     void SplashScreen.hideAsync();
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !onboardingReady) return;
     const inAuth = segments[0] === "(auth)";
-    const stayingForWhatsApp = inAuth && whatsappAuthScreens.has(String(segments.at(1) ?? ""));
-    if (!session && !pendingSession && !inAuth) router.replace("/(auth)/login");
+    const authScreen = String(segments.at(1) ?? "");
+    const stayingForWhatsApp = inAuth && whatsappAuthScreens.has(authScreen);
+    if (!session && !pendingSession && !inAuth) {
+      router.replace(onboardingSeen ? "/(auth)/login" : "/(auth)/onboarding");
+    }
     if (session && inAuth && !stayingForWhatsApp) router.replace("/(tabs)/home");
-  }, [pendingSession, ready, router, segments, session]);
+  }, [onboardingReady, onboardingSeen, pendingSession, ready, router, segments, session]);
 
   useEffect(() => {
     if (!bootReady) {
@@ -72,10 +78,27 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    if (document.getElementById("tf-input-focus-reset")) return;
+    const style = document.createElement("style");
+    style.id = "tf-input-focus-reset";
+    style.textContent =
+      "input,textarea,select,input:focus,input:focus-visible,textarea:focus,textarea:focus-visible,select:focus,select:focus-visible{outline:none!important;-webkit-tap-highlight-color:transparent;}";
+    document.head.appendChild(style);
+  }, []);
+
+  useEffect(() => {
     if (!fontsLoaded) return;
-    const textStyle = { fontFamily: fonts.regular };
-    Object.assign(Text, { defaultProps: { ...(Text.defaultProps ?? {}), style: textStyle } });
-    Object.assign(TextInput, { defaultProps: { ...(TextInput.defaultProps ?? {}), style: textStyle } });
+    const textStyle = { fontFamily: fonts.regular, ...inputReset };
+    Object.assign(Text, { defaultProps: { ...(Text.defaultProps ?? {}), style: { fontFamily: fonts.regular } } });
+    Object.assign(TextInput, {
+      defaultProps: {
+        ...(TextInput.defaultProps ?? {}),
+        style: textStyle,
+        underlineColorAndroid: "transparent",
+        selectionColor: colors.accent
+      }
+    });
   }, [fontsLoaded]);
 
   if (!fontsLoaded) {
@@ -86,6 +109,7 @@ export default function RootLayout() {
     <AuthProvider>
       <PlanProvider>
         <UIProvider>
+          <ReminderNotifications />
           <StatusBar style="dark" />
           <Gate>
             <Stack screenOptions={{ headerShown: false, animation: "fade", contentStyle: { backgroundColor: colors.skyTop } }}>

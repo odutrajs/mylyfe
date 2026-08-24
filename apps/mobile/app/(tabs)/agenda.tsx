@@ -1,6 +1,7 @@
-import { addDaysToKey, eventsForDay, monthGridKeys, weekDayKeys, zonedClock, zonedDayKey } from "@mylyfe/domain";
+import { addDaysToKey, eventsForDay, monthGridKeys, shiftWeekKey, weekDayKeys, zonedClock, zonedDayKey } from "@mylyfe/domain";
+import { useFocusEffect } from "expo-router";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { AppHeader } from "../../src/components/AppHeader";
 import { Screen } from "../../src/components/Screen";
@@ -37,7 +38,12 @@ const eventTime = (start: string, end: string, allDay: boolean, timeZone: string
 };
 
 export default function AgendaScreen() {
-  const { plan, events, loading, refresh } = usePlan();
+  const { plan, events, loading, error, refresh, syncCalendars } = usePlan();
+  useFocusEffect(
+    useCallback(() => {
+      void syncCalendars();
+    }, [syncCalendars])
+  );
   const timeZone = plan?.routine?.settings.timezone || "America/Sao_Paulo";
   const [selected, setSelected] = useState(todayKey());
   const [monthView, setMonthView] = useState(false);
@@ -71,14 +77,17 @@ export default function AgendaScreen() {
         />
       }
       refreshing={loading}
-      onRefresh={() => void refresh()}
+      onRefresh={() => void refresh({ calendars: true })}
       padded={false}
     >
       <View style={{ paddingHorizontal: 20, gap: 16 }}>
+          {error ? (
+            <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: colors.danger, paddingHorizontal: 4 }}>{error}</Text>
+          ) : null}
           <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
               <Pressable
-                onPress={() => setSelected((current) => addDaysToKey(current, monthView ? -30 : -7))}
+                onPress={() => setSelected((current) => (monthView ? addDaysToKey(current, -30) : shiftWeekKey(current, -1)))}
                 hitSlop={12}
                 accessibilityLabel={monthView ? "Mês anterior" : "Semana anterior"}
               >
@@ -88,7 +97,7 @@ export default function AgendaScreen() {
                 {formatMonthTitle(selected)}
               </Text>
               <Pressable
-                onPress={() => setSelected((current) => addDaysToKey(current, monthView ? 30 : 7))}
+                onPress={() => setSelected((current) => (monthView ? addDaysToKey(current, 30) : shiftWeekKey(current, 1)))}
                 hitSlop={12}
                 accessibilityLabel={monthView ? "Próximo mês" : "Próxima semana"}
               >
@@ -144,7 +153,7 @@ export default function AgendaScreen() {
                         >
                           <Text
                             style={{
-                              fontFamily: fonts.bold,
+                              fontFamily: fonts.regular,
                               fontSize: 14,
                               color: active ? "#FFFFFF" : inMonth ? colors.text : colors.textSoft
                             }}

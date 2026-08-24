@@ -32,8 +32,11 @@ import {
   ListTodo,
   LineChart,
   Loader2,
+  Lock,
   LogIn,
   LogOut,
+  Mail,
+  Menu,
   MessageCircle,
   Palette,
   Percent,
@@ -54,7 +57,8 @@ import {
   User,
   Users,
   UtensilsCrossed,
-  WalletCards
+  WalletCards,
+  X
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
@@ -140,6 +144,8 @@ import {
   type TransactionNature,
   type TransactionType
 } from "@mylyfe/domain";
+import { ConversionLanding } from "./ConversionLanding";
+import { AuthButton, AuthChrome, AuthFooter, FloatingField, zeloMascotSrc } from "./auth-ui";
 import { BrandLockup, Mascot, mascotMoodFromCommitment, mascotMoodFromScore, type MascotMood } from "./Mascot";
 import { MoneyField } from "./MoneyField";
 import { HealthView } from "./HealthView";
@@ -253,10 +259,10 @@ const moduleCatalog = [
 ] as const;
 
 const chartColors = {
-  conservative: "#0f766e",
-  base: "#b45309",
-  optimistic: "#be123c",
-  accent: "#2563eb"
+  conservative: "#0878F9",
+  base: "#FF9F43",
+  optimistic: "#EF5B67",
+  accent: "#37C978"
 };
 
 const commitmentLabels: Record<CommitmentStatus, string> = {
@@ -1451,27 +1457,33 @@ export default function App() {
 
   if (inviteToken && !session && (!plan || !analysis)) return <LoadingScreen />;
 
+  const handleAuthenticated = (nextSession: UserSession, token: string) => {
+    writeAuthToken(token);
+    localStorage.removeItem(authCredentialsStorageKey);
+    const personalPlanId = nextSession.personalPlanId ?? nextSession.userId;
+    const sessionForContext =
+      inviteToken && (invitePlanId || activePlanId)
+        ? { ...nextSession, personalPlanId, planId: invitePlanId || activePlanId }
+        : nextSession;
+    persistSession(sessionForContext);
+    if (sessionForContext.planId !== nextSession.planId) {
+      void persistServerSession(sessionForContext);
+    }
+    setSession(sessionForContext);
+  };
+
   if (!session) {
+    if (!inviteToken && window.location.pathname === "/comece") {
+      return <ConversionLanding onAuthenticated={handleAuthenticated} />;
+    }
+
     return (
       <AuthScreen
         initialEmail={pendingInvite?.inviteeEmail ?? inviteByToken?.inviteeEmail ?? ""}
         initialName={pendingInvite?.inviteeName ?? inviteByToken?.inviteeName ?? ""}
         inviteMode={Boolean(inviteToken)}
         lockEmail={Boolean(pendingInvite?.inviteeEmail || inviteByToken?.inviteeEmail)}
-        onAuthenticated={(nextSession, token) => {
-          writeAuthToken(token);
-          localStorage.removeItem(authCredentialsStorageKey);
-          const personalPlanId = nextSession.personalPlanId ?? nextSession.userId;
-          const sessionForContext =
-            inviteToken && (invitePlanId || activePlanId)
-              ? { ...nextSession, personalPlanId, planId: invitePlanId || activePlanId }
-              : nextSession;
-          persistSession(sessionForContext);
-          if (sessionForContext.planId !== nextSession.planId) {
-            void persistServerSession(sessionForContext);
-          }
-          setSession(sessionForContext);
-        }}
+        onAuthenticated={handleAuthenticated}
       />
     );
   }
@@ -1541,9 +1553,11 @@ export default function App() {
 
 function LoadingScreen() {
   return (
-    <main className="loading-screen">
-      <Mascot mood="think" size="xl" />
-      <span>Carregando MyLyfe</span>
+    <main className="auth-public">
+      <div className="auth-public-card">
+        <img src={zeloMascotSrc} alt="" />
+        <span>Carregando MyLyfe</span>
+      </div>
     </main>
   );
 }
@@ -1568,23 +1582,7 @@ function AuthScreen({
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [mascotMood, setMascotMood] = useState<MascotMood>("wave");
   const isNewAccount = mode === "signup";
-
-  useEffect(() => {
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduceMotion) return;
-
-    const timer = window.setTimeout(() => setMascotMood("celebrate"), 2400);
-    const loop = window.setInterval(() => {
-      setMascotMood((current) => (current === "wave" ? "celebrate" : "wave"));
-    }, 5200);
-
-    return () => {
-      window.clearTimeout(timer);
-      window.clearInterval(loop);
-    };
-  }, []);
 
   const submit = async () => {
     const normalizedEmail = normalizeEmail(email);
@@ -1627,130 +1625,115 @@ function AuthScreen({
     }
   };
 
-  return (
-    <main className="auth-landing">
-      <section className="auth-landing-hero">
-        <BrandLockup title={appName} caption="Modulo financeiro" mood="wave" />
-        <div className="auth-landing-stage">
-          <span className="auth-blob auth-blob-a" />
-          <span className="auth-blob auth-blob-b" />
-          <span className="auth-blob auth-blob-c" />
-          <span className="auth-spark auth-spark-a" />
-          <span className="auth-spark auth-spark-b" />
-          <span className="auth-spark auth-spark-c" />
-          <Mascot className="auth-landing-mascot" mood={mascotMood} size="hero" title="Lyfo te recebe no MyLyfe" />
-        </div>
-        <div className="auth-landing-copy">
-          <p className="auth-landing-kicker">Oi, eu sou o Lyfo</p>
-          <h1>Vamos entender sua vida financeira</h1>
-          <p>O diagnostico nasce dos seus dados e muda junto com eles.</p>
-        </div>
-      </section>
+  const switchMode = () => {
+    setMode(mode === "login" ? "signup" : "login");
+    setError("");
+  };
 
-      <section className="auth-landing-panel">
+  return (
+    <main>
+      <AuthChrome compact={isNewAccount}>
+        {inviteMode ? (
+          <>
+            <h1 className="auth-app-title">
+              {isNewAccount ? "Criar conta para entrar no convite" : "Entrar para aceitar o convite"}
+            </h1>
+            <p className="auth-app-body">
+              {isNewAccount
+                ? "Cadastre-se com o e-mail do convite. Ao continuar, sua conta e vinculada automaticamente. Se o mercado foi compartilhado, a lista da Casa tambem aparece pra voce."
+                : "Entre com sua senha. Sua conta sera vinculada automaticamente a esta conta compartilhada."}
+            </p>
+          </>
+        ) : null}
         <form
-          className="auth-card"
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
           }}
         >
-          <div className="auth-card-head">
-            <div className="auth-card-badge">
-              <Mascot mood={mascotMood} size="sm" title="Lyfo" />
-              <span>
-                {inviteMode
-                  ? "Convite MyLyfe"
-                  : mode === "login"
-                    ? "Bem-vindo de volta"
-                    : "Vamos comecar juntos"}
-              </span>
-            </div>
-            <h1>
-              {inviteMode
+          {isNewAccount && (
+            <FloatingField
+              label="Nome"
+              icon={<User size={20} color="#808080" strokeWidth={1.8} />}
+              value={name}
+              onChange={setName}
+              autoComplete="name"
+              placeholder="Seu nome"
+            />
+          )}
+          {lockEmail ? (
+            <FloatingField
+              label="E-mail do convite"
+              icon={<Mail size={20} color="#808080" strokeWidth={1.8} />}
+              value={email}
+              readOnly
+            />
+          ) : (
+            <FloatingField
+              label="E-mail"
+              icon={<Mail size={20} color="#808080" strokeWidth={1.8} />}
+              type="email"
+              value={email}
+              onChange={setEmail}
+              autoComplete="email"
+              placeholder="email@gmail.com"
+            />
+          )}
+          <FloatingField
+            label="Senha"
+            icon={<Lock size={20} color="#808080" strokeWidth={1.8} />}
+            type="password"
+            value={password}
+            onChange={setPassword}
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            placeholder="Digite sua senha"
+          />
+          {isNewAccount && (
+            <FloatingField
+              label="WhatsApp"
+              icon={<Smartphone size={20} color="#808080" strokeWidth={1.8} />}
+              type="tel"
+              value={phone}
+              onChange={setPhone}
+              autoComplete="tel"
+              inputMode="tel"
+              placeholder="41 99999-0000"
+            />
+          )}
+          {isNewAccount && (
+            <p className="auth-app-note">
+              Depois a gente confirma este numero no WhatsApp. Assim a secretaria liga gastos e reunioes a voce.
+            </p>
+          )}
+          {error && <p className="auth-app-error">{error}</p>}
+          <AuthButton
+            type="submit"
+            busy={busy}
+            label={
+              inviteMode
                 ? isNewAccount
-                  ? "Criar conta para entrar no convite"
-                  : "Entrar para aceitar o convite"
+                  ? "Criar conta e vincular"
+                  : "Entrar e vincular"
                 : mode === "login"
                   ? "Entrar"
-                  : "Cadastrar"}
-            </h1>
-            <p>
-              {inviteMode
-                ? isNewAccount
-                  ? "Cadastre-se com o e-mail do convite. Ao continuar, sua conta e vinculada automaticamente. Se o mercado foi compartilhado, a lista da Casa tambem aparece pra voce."
-                  : "Entre com sua senha. Sua conta sera vinculada automaticamente a esta conta compartilhada."
-                : mode === "login"
-                  ? "A conta fica no servidor. Entre com e-mail e senha de qualquer navegador."
-                  : "Crie a conta no servidor. Se este e-mail ja tinha dados, eles continuam no mesmo plano."}
+                  : "Criar conta"
+            }
+          />
+          {isNewAccount && (
+            <p className="auth-app-terms">
+              Ao criar a conta, voce aceita os <a href="/termos.html">Termos</a> e a{" "}
+              <a href="/privacidade.html">Privacidade</a>.
             </p>
-          </div>
-          {!inviteMode && (
-            <div className="auth-mode-toggle" role="tablist" aria-label="Tipo de acesso">
-              <button
-                type="button"
-                className={mode === "login" ? "active" : ""}
-                onClick={() => {
-                  setMode("login");
-                  setError("");
-                }}
-              >
-                Entrar
-              </button>
-              <button
-                type="button"
-                className={mode === "signup" ? "active" : ""}
-                onClick={() => {
-                  setMode("signup");
-                  setError("");
-                }}
-              >
-                Cadastrar
-              </button>
-            </div>
-          )}
-          <div className="form-grid single">
-            {mode === "signup" && <TextField label="Seu nome" value={name} onChange={setName} />}
-            {mode === "signup" && (
-              <TextField label="WhatsApp com DDD" value={phone} onChange={setPhone} type="tel" autoComplete="tel" />
-            )}
-            {mode === "signup" && (
-              <p className="form-note">
-                Depois a gente confirma este numero no WhatsApp. So assim a secretaria liga gastos e reunioes a voce.
-              </p>
-            )}
-            {lockEmail ? (
-              <ReadOnlyField label="E-mail do convite" value={email} />
-            ) : (
-              <TextField label="E-mail" value={email} onChange={setEmail} type="email" autoComplete="email" />
-            )}
-            <TextField
-              label="Senha"
-              value={password}
-              onChange={setPassword}
-              type="password"
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-            />
-          </div>
-          {error && <p className="form-note warn">{error}</p>}
-          <button className="primary-button auth-submit" type="submit" disabled={busy}>
-            {busy ? <Loader2 className="spin" size={16} /> : <ArrowRight size={16} />}
-            {inviteMode ? (isNewAccount ? "Criar conta e vincular" : "Entrar e vincular") : mode === "login" ? "Entrar" : "Comecar cadastro"}
-          </button>
-          {!inviteMode && (
-            <button
-              className="auth-switch-link"
-              type="button"
-              onClick={() => {
-                setMode(mode === "login" ? "signup" : "login");
-                setError("");
-              }}
-            >
-              {mode === "login" ? "Ainda nao tenho conta. Quero cadastrar" : "Ja tenho conta. Quero entrar"}
-            </button>
           )}
         </form>
-      </section>
+        {!inviteMode && (
+          <AuthFooter
+            muted={mode === "login" ? "Nao tem uma conta?" : "Ja tem uma conta?"}
+            action={mode === "login" ? "Criar conta" : "Entrar"}
+            onClick={switchMode}
+          />
+        )}
+      </AuthChrome>
     </main>
   );
 }
@@ -1765,19 +1748,15 @@ function InviteBlocked({
   onSignOut: () => void;
 }) {
   return (
-    <main className="invite-accept-shell">
-      <section className="invite-accept-card">
-        <BrandLockup title={appName} caption="Convite de modulo" mood="think" />
-        <div>
-          <h1>Este convite e de outro e-mail</h1>
-          <p>
-            Voce entrou como {session.email}, mas o convite foi criado para {invite.inviteeEmail}. Saia e entre com o e-mail
-            correto para vincular as contas.
-          </p>
-        </div>
-        <button className="primary-button" onClick={onSignOut}>
-          <Users size={16} /> Trocar de conta
-        </button>
+    <main className="auth-public">
+      <section className="auth-public-card">
+        <img src={zeloMascotSrc} alt="" />
+        <h1>Este convite e de outro e-mail</h1>
+        <p>
+          Voce entrou como {session.email}, mas o convite foi criado para {invite.inviteeEmail}. Saia e entre com o e-mail
+          correto para vincular as contas.
+        </p>
+        <AuthButton label="Trocar de conta" onClick={onSignOut} />
       </section>
     </main>
   );
@@ -1793,16 +1772,12 @@ function InviteIssue({
   onSignOut: () => void;
 }) {
   return (
-    <main className="invite-accept-shell">
-      <section className="invite-accept-card">
-        <BrandLockup title={appName} caption="Convite de modulo" mood="think" />
-        <div>
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </div>
-        <button className="primary-button" onClick={onSignOut}>
-          <Users size={16} /> Voltar ao inicio
-        </button>
+    <main className="auth-public">
+      <section className="auth-public-card">
+        <img src={zeloMascotSrc} alt="" />
+        <h1>{title}</h1>
+        <p>{description}</p>
+        <AuthButton label="Voltar ao inicio" onClick={onSignOut} />
       </section>
     </main>
   );
@@ -1835,7 +1810,7 @@ function Onboarding({
       <aside className="onboarding-aside">
         <BrandLockup title={appName} caption="Modulo financeiro" />
         <div className="consulting-panel">
-          <Mascot mood="wave" size="md" />
+          <Mascot mood="idle" size="lg" className="mascot--static" />
           <div className="consulting-panel-copy">
             <h1>Vamos entender sua vida financeira</h1>
             <p>O diagnostico nasce dos seus dados e muda junto com eles.</p>
@@ -1976,7 +1951,7 @@ function PartnerOnboarding({
       <aside className="onboarding-aside">
         <BrandLockup title={appName} caption="Conta vinculada" />
         <div className="consulting-panel">
-          <Mascot mood="wave" size="md" />
+          <Mascot mood="idle" size="lg" className="mascot--static" />
           <div className="consulting-panel-copy">
             <h1>Agora cadastre os seus dados</h1>
             <p>
@@ -2080,6 +2055,7 @@ function Shell({
   setSession: Dispatch<SetStateAction<UserSession | null>>;
   onSignOut: () => void;
 }) {
+  const [navOpen, setNavOpen] = useState(false);
   const [financeMenuOpen, setFinanceMenuOpen] = useState(true);
   const [secretaryMenuOpen, setSecretaryMenuOpen] = useState(true);
   const [routineMenuOpen, setRoutineMenuOpen] = useState(true);
@@ -2119,10 +2095,43 @@ function Shell({
     if (view === "secretary-whatsapp" || view === "secretary-settings") setView("secretary-home");
   }, [canAccessHome, isAdmin, setView, view]);
 
+  const go = (next: View) => {
+    setView(next);
+    setNavOpen(false);
+  };
+
+  useEffect(() => {
+    const close = () => {
+      if (window.innerWidth > 860) setNavOpen(false);
+    };
+    window.addEventListener("resize", close);
+    return () => window.removeEventListener("resize", close);
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle("nav-open", navOpen);
+    return () => document.body.classList.remove("nav-open");
+  }, [navOpen]);
+
   return (
-    <main className="app-shell">
+    <main className={`app-shell${navOpen ? " nav-open" : ""}`}>
+      <header className="mobile-topbar">
+        <button
+          className="mobile-nav-toggle"
+          type="button"
+          aria-label={navOpen ? "Fechar menu" : "Abrir menu"}
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen((current) => !current)}
+        >
+          {navOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+        <button className="brand-lockup-button" type="button" onClick={() => go("profile")}>
+          <BrandLockup title={plan.workspace.name || appName} caption={currentUserName} />
+        </button>
+      </header>
+      <button className="sidebar-backdrop" type="button" aria-label="Fechar menu" onClick={() => setNavOpen(false)} />
       <aside className="sidebar">
-        <button className="brand-lockup-button" type="button" onClick={() => setView("profile")}>
+        <button className="brand-lockup-button sidebar-brand" type="button" onClick={() => go("profile")}>
           <BrandLockup title={plan.workspace.name || appName} caption={currentUserName} />
         </button>
 
@@ -2135,11 +2144,11 @@ function Shell({
                 module={module}
                 active={module.id === activeModule}
                 onClick={() => {
-                  if (module.id === "finance") setView("dashboard");
-                  if (module.id === "secretary") setView("secretary-home");
-                  if (module.id === "routine") setView("routine-agenda");
-                  if (module.id === "health") setView("health-home");
-                  if (module.id === "home") setView("home-list");
+                  if (module.id === "finance") go("dashboard");
+                  if (module.id === "secretary") go("secretary-home");
+                  if (module.id === "routine") go("routine-agenda");
+                  if (module.id === "health") go("health-home");
+                  if (module.id === "home") go("home-list");
                 }}
               />
             ))}
@@ -2159,14 +2168,14 @@ function Shell({
             </button>
             {financeMenuOpen && (
               <div className="nav-submenu">
-                <NavButton icon={<BarChart3 size={18} />} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} />
-                <NavButton icon={<FileUp size={18} />} label="Lancar" active={view === "import"} onClick={() => setView("import")} />
-                <NavButton icon={<WalletCards size={18} />} label="Transacoes" active={view === "transactions"} onClick={() => setView("transactions")} />
-                <NavButton icon={<Palette size={18} />} label="Categorias" active={view === "categories"} onClick={() => setView("categories")} />
-                <NavButton icon={<ClipboardList size={18} />} label="Dados financeiros" active={view === "plan"} onClick={() => setView("plan")} />
-                <NavButton icon={<LineChart size={18} />} label="Historico" active={view === "history"} onClick={() => setView("history")} />
+                <NavButton icon={<BarChart3 size={18} />} label="Dashboard" active={view === "dashboard"} onClick={() => go("dashboard")} />
+                <NavButton icon={<FileUp size={18} />} label="Lancar" active={view === "import"} onClick={() => go("import")} />
+                <NavButton icon={<WalletCards size={18} />} label="Transacoes" active={view === "transactions"} onClick={() => go("transactions")} />
+                <NavButton icon={<Palette size={18} />} label="Categorias" active={view === "categories"} onClick={() => go("categories")} />
+                <NavButton icon={<ClipboardList size={18} />} label="Dados financeiros" active={view === "plan"} onClick={() => go("plan")} />
+                <NavButton icon={<LineChart size={18} />} label="Historico" active={view === "history"} onClick={() => go("history")} />
                 {isAdmin && (
-                  <NavButton icon={<ShieldCheck size={18} />} label="Acessos" active={view === "access"} onClick={() => setView("access")} />
+                  <NavButton icon={<ShieldCheck size={18} />} label="Acessos" active={view === "access"} onClick={() => go("access")} />
                 )}
               </div>
             )}
@@ -2186,12 +2195,12 @@ function Shell({
             </button>
             {secretaryMenuOpen && (
               <div className="nav-submenu">
-                <NavButton icon={<MessageCircle size={18} />} label="Painel" active={view === "secretary-home"} onClick={() => setView("secretary-home")} />
-                <NavButton icon={<Bell size={18} />} label="Lembretes" active={view === "secretary-alerts"} onClick={() => setView("secretary-alerts")} />
+                <NavButton icon={<MessageCircle size={18} />} label="Painel" active={view === "secretary-home"} onClick={() => go("secretary-home")} />
+                <NavButton icon={<Bell size={18} />} label="Lembretes" active={view === "secretary-alerts"} onClick={() => go("secretary-alerts")} />
                 {isAdmin && (
                   <>
-                    <NavButton icon={<Smartphone size={18} />} label="WhatsApp" active={view === "secretary-whatsapp"} onClick={() => setView("secretary-whatsapp")} />
-                    <NavButton icon={<SlidersHorizontal size={18} />} label="Preferencias" active={view === "secretary-settings"} onClick={() => setView("secretary-settings")} />
+                    <NavButton icon={<Smartphone size={18} />} label="WhatsApp" active={view === "secretary-whatsapp"} onClick={() => go("secretary-whatsapp")} />
+                    <NavButton icon={<SlidersHorizontal size={18} />} label="Preferencias" active={view === "secretary-settings"} onClick={() => go("secretary-settings")} />
                   </>
                 )}
               </div>
@@ -2212,10 +2221,10 @@ function Shell({
             </button>
             {healthMenuOpen && (
               <div className="nav-submenu">
-                <NavButton icon={<HeartPulse size={18} />} label="Painel" active={view === "health-home"} onClick={() => setView("health-home")} />
-                <NavButton icon={<ShieldCheck size={18} />} label="Carteira" active={view === "health-wallet"} onClick={() => setView("health-wallet")} />
-                <NavButton icon={<CalendarDays size={18} />} label="Consultas" active={view === "health-appointments"} onClick={() => setView("health-appointments")} />
-                <NavButton icon={<Pill size={18} />} label="Medicamentos" active={view === "health-meds"} onClick={() => setView("health-meds")} />
+                <NavButton icon={<HeartPulse size={18} />} label="Painel" active={view === "health-home"} onClick={() => go("health-home")} />
+                <NavButton icon={<ShieldCheck size={18} />} label="Carteira" active={view === "health-wallet"} onClick={() => go("health-wallet")} />
+                <NavButton icon={<CalendarDays size={18} />} label="Consultas" active={view === "health-appointments"} onClick={() => go("health-appointments")} />
+                <NavButton icon={<Pill size={18} />} label="Medicamentos" active={view === "health-meds"} onClick={() => go("health-meds")} />
               </div>
             )}
           </nav>
@@ -2234,7 +2243,7 @@ function Shell({
             </button>
             {homeMenuOpen && (
               <div className="nav-submenu">
-                <NavButton icon={<ShoppingBag size={18} />} label="Mercado" active={view === "home-list"} onClick={() => setView("home-list")} />
+                <NavButton icon={<ShoppingBag size={18} />} label="Mercado" active={view === "home-list"} onClick={() => go("home-list")} />
               </div>
             )}
           </nav>
@@ -2253,17 +2262,17 @@ function Shell({
             </button>
             {routineMenuOpen && (
               <div className="nav-submenu">
-                <NavButton icon={<CalendarDays size={18} />} label="Agenda" active={view === "routine-home" || view === "routine-agenda"} onClick={() => setView("routine-agenda")} />
-                <NavButton icon={<ListTodo size={18} />} label="Tarefas" active={view === "routine-tasks"} onClick={() => setView("routine-tasks")} />
-                <NavButton icon={<Layers size={18} />} label="Contextos" active={view === "routine-contexts"} onClick={() => setView("routine-contexts")} />
-                <NavButton icon={<Link2 size={18} />} label="Calendarios" active={view === "routine-calendars"} onClick={() => setView("routine-calendars")} />
+                <NavButton icon={<CalendarDays size={18} />} label="Agenda" active={view === "routine-home" || view === "routine-agenda"} onClick={() => go("routine-agenda")} />
+                <NavButton icon={<ListTodo size={18} />} label="Tarefas" active={view === "routine-tasks"} onClick={() => go("routine-tasks")} />
+                <NavButton icon={<Layers size={18} />} label="Contextos" active={view === "routine-contexts"} onClick={() => go("routine-contexts")} />
+                <NavButton icon={<Link2 size={18} />} label="Calendarios" active={view === "routine-calendars"} onClick={() => go("routine-calendars")} />
               </div>
             )}
           </nav>
         )}
         {session && (
           <nav className="sidebar-section">
-            <NavButton icon={<User size={18} />} label="Perfil" active={view === "profile"} onClick={() => setView("profile")} />
+            <NavButton icon={<User size={18} />} label="Perfil" active={view === "profile"} onClick={() => go("profile")} />
             <button className="nav-button" onClick={onSignOut}>
               <LogOut size={18} />
               <span>Sair</span>
@@ -3419,11 +3428,12 @@ function ChartFrame({ children, compact }: { children: ReactNode; compact?: bool
   return <div className={`chart-frame ${compact ? "compact" : ""}`}>{children}</div>;
 }
 
-function EmptyState({ title, mood = "search" }: { title: string; mood?: MascotMood }) {
+function EmptyState({ title, caption, mood = "search" }: { title: string; caption?: string; mood?: MascotMood }) {
   return (
     <div className="empty-state">
       <Mascot mood={mood} size="lg" />
       <span>{title}</span>
+      {caption ? <small>{caption}</small> : null}
     </div>
   );
 }

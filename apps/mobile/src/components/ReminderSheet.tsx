@@ -24,7 +24,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, Tex
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { todayKey } from "../format";
 import { usePlan } from "../plan-context";
-import { colors, fonts } from "../theme";
+import { colors, fonts, inputReset } from "../theme";
 import { useUI } from "../ui-context";
 import { SelectSheet } from "./SelectSheet";
 
@@ -36,11 +36,9 @@ type CategoryOption = {
   category?: ExpenseCategory;
 };
 
-const muted = "#808080";
-const placeholder = "#ACACAC";
-const cardBorder = "rgba(0, 0, 0, 0.05)";
+const muted = colors.textMuted;
+const cardBorder = colors.border;
 const iconAction = colors.accent;
-const chipBg = "#FFF3E0";
 
 const frequencies: Array<{ id: AlertFrequency; label: string }> = [
   { id: "once", label: "Não repetir" },
@@ -113,8 +111,9 @@ export function ReminderSheet() {
   const [priority, setPriority] = useState<Priority>("normal");
   const [notes, setNotes] = useState("");
   const [picker, setPicker] = useState<"date" | "hour" | "frequency" | "priority" | null>(null);
+  const [saving, setSaving] = useState(false);
   const selectedCategory = categoryOptions.find((item) => item.id === categoryId);
-  const canSave = Boolean(title.trim());
+  const canSave = Boolean(title.trim()) && !saving;
   const today = todayKey();
 
   useEffect(() => {
@@ -130,24 +129,29 @@ export function ReminderSheet() {
   };
 
   const submit = async () => {
-    if (!canSave) return;
+    if (!title.trim() || saving) return;
     const option = selectedCategory ?? { kind: "one_off" as const, category: undefined };
     const remind = priorities.find((item) => item.id === priority)?.remindDays;
-    await upsertAlert({
-      title: title.trim(),
-      kind: option.kind,
-      category: option.category,
-      amount: cents > 0 ? cents / 100 : undefined,
-      notes: notes.trim() || undefined,
-      frequency,
-      dueDay: frequency === "monthly" ? dayFromKey(date) : undefined,
-      dueDate: frequency === "once" ? date : undefined,
-      weekday: frequency === "weekly" ? weekdayFromKey(date) : undefined,
-      preferredHour: hour ?? 9,
-      remindDaysBefore: remind,
-      askIfPaid: option.kind === "bill" || option.kind === "tax"
-    });
-    closeSheet();
+    setSaving(true);
+    try {
+      await upsertAlert({
+        title: title.trim(),
+        kind: option.kind,
+        category: option.category,
+        amount: cents > 0 ? cents / 100 : undefined,
+        notes: notes.trim() || undefined,
+        frequency,
+        dueDay: frequency === "monthly" ? dayFromKey(date) : undefined,
+        dueDate: frequency === "once" ? date : undefined,
+        weekday: frequency === "weekly" ? weekdayFromKey(date) : undefined,
+        preferredHour: hour ?? 9,
+        remindDaysBefore: remind,
+        askIfPaid: option.kind === "bill" || option.kind === "tax"
+      });
+      closeSheet();
+    } finally {
+      setSaving(false);
+    }
   };
 
   const goBack = () => {
@@ -170,27 +174,18 @@ export function ReminderSheet() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
       >
-        <View
-          style={{
-            paddingTop: insets.top + 12,
-            paddingHorizontal: 24,
-            paddingBottom: 12,
-            backgroundColor: colors.surface,
-            borderBottomWidth: 1,
-            borderBottomColor: cardBorder
-          }}
-        >
+        <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 24, paddingBottom: 12 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
             <Pressable onPress={goBack} hitSlop={12} accessibilityLabel="Voltar" style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}>
               <ChevronLeft size={20} color={colors.text} />
             </Pressable>
             {step === "form" ? (
               <View style={{ flex: 1, alignItems: "center", paddingRight: 32 }}>
-                <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: muted }}>Lembretes</Text>
-                <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: colors.text }}>Adicionar lembrete</Text>
+                <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: muted }}>Lembretes</Text>
+                <Text style={{ fontSize: 22, fontFamily: fonts.regular, color: colors.text }}>Adicionar lembrete</Text>
               </View>
             ) : (
-              <Text style={{ flex: 1, fontSize: 18, fontFamily: fonts.bold, color: colors.text }}>Categoria</Text>
+              <Text style={{ flex: 1, fontSize: 22, fontFamily: fonts.regular, color: colors.text }}>Categoria</Text>
             )}
           </View>
         </View>
@@ -198,35 +193,27 @@ export function ReminderSheet() {
         {step === "form" ? (
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24, gap: 20 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24, gap: 20 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
-            <View
-              style={{
-                backgroundColor: colors.surface,
-                borderWidth: 1,
-                borderColor: cardBorder,
-                borderRadius: 24,
-                paddingHorizontal: 20,
-                paddingVertical: 8
-              }}
-            >
+            <View>
               <FormRow label="Título" icon={Pencil}>
                 <TextInput
                   ref={titleRef}
                   value={title}
                   onChangeText={setTitle}
                   placeholder="Ex: Pagar conta de luz, Renovar receita..."
-                  placeholderTextColor={placeholder}
-                  style={{ fontSize: 16, fontFamily: fonts.semibold, color: colors.text, padding: 0 }}
+                  placeholderTextColor={muted}
+                  selectionColor={colors.accent}
+                  style={{ fontSize: 16, fontFamily: fonts.regular, color: colors.text, padding: 0, ...inputReset }}
                 />
               </FormRow>
               <FormRow label="Data" value={formatDate(date)} icon={Calendar} onPress={() => setPicker("date")} />
               <FormRow
                 label="Horário"
                 value={hour === null ? "Definir horário" : formatHour(hour)}
-                valueColor={hour === null ? placeholder : colors.text}
+                valueColor={hour === null ? muted : colors.text}
                 icon={Clock}
                 onPress={() => setPicker("hour")}
               />
@@ -239,7 +226,7 @@ export function ReminderSheet() {
               <FormRow
                 label="Categoria"
                 value={selectedCategory?.label ?? "Selecionar categoria"}
-                valueColor={selectedCategory ? colors.text : placeholder}
+                valueColor={selectedCategory ? colors.text : muted}
                 icon={Tag}
                 onPress={() => setStep("category")}
               />
@@ -248,7 +235,8 @@ export function ReminderSheet() {
                   value={`R$ ${formatCents(cents)}`}
                   onChangeText={(value) => setCents(Number(value.replace(/\D/g, "").slice(0, 9) || 0))}
                   keyboardType="number-pad"
-                  style={{ fontSize: 16, fontFamily: fonts.semibold, color: cents > 0 ? colors.text : placeholder, padding: 0 }}
+                  selectionColor={colors.accent}
+                  style={{ fontSize: 16, fontFamily: fonts.regular, color: cents > 0 ? colors.text : muted, padding: 0, ...inputReset }}
                 />
               </FormRow>
               <FormRow
@@ -262,22 +250,22 @@ export function ReminderSheet() {
                   value={notes}
                   onChangeText={setNotes}
                   placeholder="Adicionar nota..."
-                  placeholderTextColor={placeholder}
-                  style={{ fontSize: 16, fontFamily: fonts.semibold, color: colors.text, padding: 0 }}
+                  placeholderTextColor={muted}
+                  selectionColor={colors.accent}
+                  style={{ fontSize: 16, fontFamily: fonts.regular, color: colors.text, padding: 0, ...inputReset }}
                 />
               </FormRow>
             </View>
 
             <View style={{ gap: 12 }}>
-              <View style={{ height: 1, backgroundColor: cardBorder }} />
-              <Text style={{ fontSize: 15, fontFamily: fonts.bold, color: colors.text }}>Modelos rápidos</Text>
+              <Text style={{ fontSize: 16, fontFamily: fonts.regular, color: colors.text }}>Modelos rápidos</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {templates.map((item) => (
                   <Pressable
                     key={item.title}
                     onPress={() => applyTemplate(item)}
                     style={{
-                      backgroundColor: chipBg,
+                      backgroundColor: colors.accentSoft,
                       borderRadius: 100,
                       paddingHorizontal: 14,
                       paddingVertical: 8,
@@ -286,8 +274,8 @@ export function ReminderSheet() {
                       gap: 6
                     }}
                   >
-                    <item.Icon size={14} color={colors.warning} strokeWidth={2} />
-                    <Text style={{ fontSize: 14, fontFamily: fonts.semibold, color: colors.text }}>{item.title}</Text>
+                    <item.Icon size={14} color={colors.accent} strokeWidth={2} />
+                    <Text style={{ fontSize: 14, fontFamily: fonts.regular, color: colors.text }}>{item.title}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -319,7 +307,7 @@ export function ReminderSheet() {
                     >
                       <Icon size={18} color="#000000" strokeWidth={2} />
                     </View>
-                    <Text style={{ flex: 1, fontSize: 16, fontFamily: fonts.semibold, color: colors.text }}>{item.label}</Text>
+                    <Text style={{ flex: 1, fontSize: 16, fontFamily: fonts.regular, color: colors.text }}>{item.label}</Text>
                     {active ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent }} /> : null}
                   </Pressable>
                   {index < categoryOptions.length - 1 ? <View style={{ height: 1, backgroundColor: cardBorder }} /> : null}
@@ -343,7 +331,9 @@ export function ReminderSheet() {
                 opacity: canSave ? 1 : 0.45
               }}
             >
-              <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: "#FFFFFF" }}>Salvar lembrete</Text>
+              <Text style={{ fontSize: 16, fontFamily: fonts.bold, color: "#FFFFFF" }}>
+                {saving ? "Salvando..." : "Salvar lembrete"}
+              </Text>
             </Pressable>
           </View>
         ) : null}
@@ -408,11 +398,11 @@ function FormRow({
   children?: ReactNode;
 }) {
   const content = (
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, gap: 12 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 16, gap: 12 }}>
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: muted }}>{label}</Text>
         {children ?? (
-          <Text style={{ fontSize: 16, fontFamily: fonts.semibold, color: valueColor }} numberOfLines={1}>
+          <Text style={{ fontSize: 16, fontFamily: fonts.regular, color: valueColor }} numberOfLines={1}>
             {value}
           </Text>
         )}

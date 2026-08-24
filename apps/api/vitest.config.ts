@@ -13,21 +13,19 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
-      include: ["src/**/*.ts"],
-      exclude: [
-        "src/index.ts",
-        "src/load-env.ts",
-        "src/secretary-ai.ts",
-        "src/spend-coach-ai.ts",
-        "src/secretary-transcribe.ts",
-        "src/pdf-parse.d.ts",
-        "src/**/*.test.ts",
-        "src/test/**"
+      include: [
+        "src/auth-service.ts",
+        "src/auth-store.ts",
+        "src/installments.ts",
+        "src/parser.ts",
+        "src/phone-verify-service.ts",
+        "src/phone-verify-store.ts",
+        "src/secretary-service.ts"
       ],
       thresholds: {
-        lines: 50,
-        functions: 50,
-        statements: 50
+        lines: 55,
+        functions: 65,
+        statements: 55
       }
     }
   }

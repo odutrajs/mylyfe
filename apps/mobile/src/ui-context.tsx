@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 
-export type SheetKind = "transaction" | "shopping" | "reminder" | "account" | null;
+export type SheetKind = "transaction" | "shopping" | "reminder" | "task" | "account" | null;
 
 type UIContextValue = {
   sheet: SheetKind;

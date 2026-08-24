@@ -2,7 +2,7 @@ import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react-native";
 import { useState } from "react";
-import { Linking, Pressable, Text, TextInput } from "react-native";
+import { Pressable, Text, TextInput } from "react-native";
 import { ApiError } from "../../src/api";
 import { useAuth } from "../../src/auth-context";
 import { AuthButton, AuthFooter, AuthScreen, FloatingField, authPlaceholder, authStyles } from "../../src/components/auth-ui";
@@ -67,7 +67,7 @@ export default function LoginScreen() {
         />
       </FloatingField>
 
-      <Pressable onPress={() => void Linking.openURL("https://feedeo.com.br")} style={{ alignSelf: "flex-end", marginTop: -4 }}>
+      <Pressable onPress={() => router.push("/(auth)/forgot-password")} style={{ alignSelf: "flex-end", marginTop: -4 }}>
         <Text style={{ color: "#0878F9", fontSize: 14, lineHeight: 20 }}>Esqueci a senha</Text>
       </Pressable>
 

@@ -84,6 +84,17 @@ export const alertKindLabels: Record<AlertKind, string> = {
 
 export const createAlertId = (now = new Date()) => `alert-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+export const isAgendaLinkedAlert = (alert: Pick<LifeAlert, "id" | "notes">) =>
+  Boolean(alert.notes?.includes("slot:")) ||
+  alert.id.startsWith("alert-event-") ||
+  alert.id.startsWith("alert-appt-");
+
+export const secretaryAlertFamilyId = (alertId: string) => {
+  if (alertId.startsWith("alert-appt-")) return alertId.replace(/-(3h|1h|15m|checkin)$/, "");
+  if (/^alert-event-.+-15m$/.test(alertId)) return alertId.replace(/-15m$/, "");
+  return "";
+};
+
 const eventId = (now: Date) => `evt-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
 const pad = (value: number) => String(value).padStart(2, "0");
@@ -545,14 +556,38 @@ export const completeAlertOccurrence = (
   });
 };
 
+export const relatedSecretaryAlertIds = (alerts: LifeAlert[], alertId: string) => {
+  const target = alerts.find((alert) => alert.id === alertId);
+  if (!target) return [alertId];
+
+  const family = secretaryAlertFamilyId(target.id);
+  if (family) {
+    return [...new Set(alerts.filter((alert) => secretaryAlertFamilyId(alert.id) === family).map((alert) => alert.id))];
+  }
+
+  const twins = alerts.filter(
+    (alert) =>
+      alert.status === target.status &&
+      alert.title === target.title &&
+      alert.kind === target.kind &&
+      alert.frequency === target.frequency &&
+      alert.cycle.dueAt === target.cycle.dueAt &&
+      alert.amount === target.amount
+  );
+  return twins.length > 1 ? twins.map((alert) => alert.id) : [target.id];
+};
+
 export const completePlanAlertOccurrence = (plan: FinancePlan, alertId: string, now = new Date()): FinancePlan => {
   const secretary = normalizeSecretaryModuleState(plan.secretary);
   const timeZone = secretary.settings.timezone || plan.routine?.settings.timezone || defaultSecretarySettings().timezone;
+  const related = new Set(relatedSecretaryAlertIds(secretary.alerts, alertId));
   return {
     ...plan,
     secretary: {
       ...secretary,
-      alerts: secretary.alerts.map((alert) => (alert.id === alertId ? completeAlertOccurrence(alert, now, timeZone) : alert)),
+      alerts: secretary.alerts.map((alert) =>
+        related.has(alert.id) ? completeAlertOccurrence(alert, now, timeZone) : alert
+      ),
       updatedAt: now.toISOString()
     }
   };

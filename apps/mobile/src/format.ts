@@ -17,6 +17,15 @@ export const firstName = (name?: string) => {
   return value.split(/\s+/)[0] || "por ai";
 };
 
+export const initialsFrom = (name?: string) => {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  if (!first) return "?";
+  if (!last || parts.length === 1) return first.slice(0, 2).toUpperCase();
+  return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
+};
+
 export const monthTitle = (month: string) => {
   const [year, monthNumber] = month.split("-").map(Number);
   const date = new Date(year ?? 1970, (monthNumber ?? 1) - 1, 1);
@@ -42,15 +51,15 @@ export const weekdayLabels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"];
 
 export const categoryStatusCopy = (item: CategoryBudgetProgress) => {
   if (item.status === "over" && item.remaining !== null) {
-    return `${preciseCurrency.format(Math.abs(item.remaining))} acima do orcamento`;
+    return `${preciseCurrency.format(Math.abs(item.remaining))} acima do orçamento`;
   }
   if (item.remaining !== null && item.remaining <= 80 && item.limit > 0) {
     return `Apenas ${preciseCurrency.format(item.remaining)} restando`;
   }
   if (item.remaining !== null && item.remaining > 0) {
-    return `${preciseCurrency.format(item.remaining)} disponivel`;
+    return `${preciseCurrency.format(item.remaining)} disponível`;
   }
-  return item.spent > 0 ? `${preciseCurrency.format(item.spent)} gastos` : "Sem gastos neste mes";
+  return item.spent > 0 ? `${preciseCurrency.format(item.spent)} gastos` : "Sem gastos neste mês";
 };
 
 export const categoryLabel = (id: ExpenseCategory, name?: string) => name || String(id);

@@ -31,13 +31,12 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, Tex
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../auth-context";
 import { usePlan } from "../plan-context";
-import { colors, fonts } from "../theme";
+import { colors, fonts, inputReset } from "../theme";
 import { useUI } from "../ui-context";
 import { SelectSheet } from "./SelectSheet";
 
-const muted = "#808080";
-const placeholder = "#ACACAC";
-const cardBorder = "rgba(0, 0, 0, 0.05)";
+const muted = colors.textMuted;
+const cardBorder = colors.border;
 const iconAction = colors.accent;
 const iconBlack = "#000000";
 
@@ -117,27 +116,18 @@ export function ShoppingSheet() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
       >
-        <View
-          style={{
-            paddingTop: insets.top + 12,
-            paddingHorizontal: 24,
-            paddingBottom: 12,
-            backgroundColor: colors.surface,
-            borderBottomWidth: 1,
-            borderBottomColor: cardBorder
-          }}
-        >
+        <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 24, paddingBottom: 12 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
             <Pressable onPress={goBack} hitSlop={12} accessibilityLabel="Voltar" style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}>
               <ChevronLeft size={20} color={colors.text} />
             </Pressable>
             {step === "form" ? (
               <View style={{ flex: 1, alignItems: "center", paddingRight: 32 }}>
-                <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: muted }}>Mercado</Text>
-                <Text style={{ fontSize: 18, fontFamily: fonts.bold, color: colors.text }}>Adicionar item</Text>
+                <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: muted }}>Mercado</Text>
+                <Text style={{ fontSize: 22, fontFamily: fonts.regular, color: colors.text }}>Adicionar item</Text>
               </View>
             ) : (
-              <Text style={{ flex: 1, fontSize: 18, fontFamily: fonts.bold, color: colors.text }}>Setor do mercado</Text>
+              <Text style={{ flex: 1, fontSize: 22, fontFamily: fonts.regular, color: colors.text }}>Setor do mercado</Text>
             )}
           </View>
         </View>
@@ -145,40 +135,30 @@ export function ShoppingSheet() {
         {step === "form" ? (
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
-            <View
-              style={{
-                backgroundColor: colors.surface,
-                borderWidth: 1,
-                borderColor: cardBorder,
-                borderRadius: 24,
-                paddingHorizontal: 24,
-                paddingVertical: 8
-              }}
-            >
-              <FormRow label="Nome do item" icon={Pencil}>
-                <TextInput
-                  ref={nameRef}
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Ex: Banana, Arroz, Detergente..."
-                  placeholderTextColor={placeholder}
-                  style={{ fontSize: 16, fontFamily: fonts.semibold, color: colors.text, padding: 0 }}
-                />
-              </FormRow>
-              <FormRow label="Quantidade" value={`${quantity} un`} icon={Pencil} onPress={() => setPickingQuantity(true)} />
-              <FormRow
-                label="Setor do mercado"
-                value={sector ? shoppingSectorLabels[sector] : "Selecionar setor"}
-                valueColor={sector ? colors.text : placeholder}
-                icon={Tag}
-                onPress={() => setStep("sector")}
-                last
+            <FormRow label="Nome do item" icon={Pencil}>
+              <TextInput
+                ref={nameRef}
+                value={name}
+                onChangeText={setName}
+                placeholder="Ex: Banana, Arroz, Detergente..."
+                placeholderTextColor={muted}
+                selectionColor={colors.accent}
+                style={{ fontSize: 16, fontFamily: fonts.regular, color: colors.text, padding: 0, ...inputReset }}
               />
-            </View>
+            </FormRow>
+            <FormRow label="Quantidade" value={`${quantity} un`} icon={Pencil} onPress={() => setPickingQuantity(true)} />
+            <FormRow
+              label="Setor do mercado"
+              value={sector ? shoppingSectorLabels[sector] : "Selecionar setor"}
+              valueColor={sector ? colors.text : muted}
+              icon={Tag}
+              onPress={() => setStep("sector")}
+              last
+            />
           </ScrollView>
         ) : (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8 }}>
@@ -206,7 +186,7 @@ export function ShoppingSheet() {
                     >
                       <Icon size={18} color={iconBlack} strokeWidth={2} />
                     </View>
-                    <Text style={{ flex: 1, fontSize: 16, fontFamily: fonts.semibold, color: colors.text }}>
+                    <Text style={{ flex: 1, fontSize: 16, fontFamily: fonts.regular, color: colors.text }}>
                       {shoppingSectorLabels[item]}
                     </Text>
                     {active ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent }} /> : null}
@@ -269,11 +249,11 @@ function FormRow({
   children?: ReactNode;
 }) {
   const content = (
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, gap: 12 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 16, gap: 12 }}>
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={{ fontSize: 13, fontFamily: fonts.medium, color: muted }}>{label}</Text>
         {children ?? (
-          <Text style={{ fontSize: 16, fontFamily: fonts.semibold, color: valueColor }} numberOfLines={1}>
+          <Text style={{ fontSize: 16, fontFamily: fonts.regular, color: valueColor }} numberOfLines={1}>
             {value}
           </Text>
         )}

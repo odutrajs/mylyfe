@@ -1,5 +1,5 @@
 import type { LifeAlert } from "@mylyfe/domain";
-import { normalizeSecretaryModuleState, weekDayKeys, zonedClock, zonedDayKey } from "@mylyfe/domain";
+import { isAgendaLinkedAlert, isRecurringAlert, normalizeSecretaryModuleState, weekDayKeys, zonedClock, zonedDayKey } from "@mylyfe/domain";
 import {
   Activity,
   Bell,
@@ -16,10 +16,12 @@ import {
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { AnimatedCheck, FadeOnComplete, useHeldComplete } from "../../src/components/AnimatedCheck";
 import { AppHeader } from "../../src/components/AppHeader";
 import { Screen } from "../../src/components/Screen";
-import { preciseCurrency, todayKey } from "../../src/format";
+import { frequencyLabel, preciseCurrency, todayKey } from "../../src/format";
 import { usePlan } from "../../src/plan-context";
+import { cleanReminderNotes, groupReminderAlerts, type ReminderGroup } from "../../src/reminder-groups";
 import { colors, fonts } from "../../src/theme";
 import { useUI } from "../../src/ui-context";
 
@@ -27,26 +29,15 @@ const mascotLembretes = require("../../assets/finance/mascote-header-lembretes.p
 
 type Filter = "all" | "today" | "week" | "pending";
 
-type ReminderGroup = {
-  id: string;
-  representative: LifeAlert;
-  alerts: LifeAlert[];
-  weekdays: number[];
-};
-
 const iconBlack = "#000000";
 const cardBorder = "rgba(0, 0, 0, 0.05)";
 const muted = "#808080";
-const weekdayShort = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 const normalize = (value: string) =>
   value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
-
-const isAppointmentAlert = (alert: LifeAlert) =>
-  alert.category === "health" || Boolean(alert.notes?.includes("slot:"));
 
 const iconFor = (alert: LifeAlert) => {
   const key = normalize(`${alert.title} ${alert.notes ?? ""} ${alert.kind}`);
@@ -72,11 +63,6 @@ const filters: Array<{ id: Filter; label: string }> = [
   { id: "pending", label: "Pendentes" }
 ];
 
-const weekdayFromKey = (dayKey: string) => {
-  const [year, month, day] = dayKey.split("-").map(Number);
-  return new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1)).getUTCDay();
-};
-
 const monthLabel = (dayKey: string) => {
   const [year, month, day] = dayKey.split("-").map(Number);
   const date = new Date(year ?? 1970, (month ?? 1) - 1, day ?? 1);
@@ -98,71 +84,26 @@ const formatShortDate = (iso: string, timeZone: string) => {
   return `${day} ${monthLabel(key)}`;
 };
 
-const formatWeekdays = (days: number[]) => {
-  const sorted = [...new Set(days)].sort((left, right) => left - right);
-  if (sorted.join(",") === "1,2,3,4,5") return "Seg a sex";
-  if (sorted.length === 7) return "Todo dia";
-  if (sorted.join(",") === "0,6") return "Fim de semana";
-  return sorted.map((day) => weekdayShort[day]).join(", ");
-};
-
-const cleanNotes = (notes?: string) =>
-  (notes ?? "").replace(/^slot:(vespera|3h|1h|15m|checkin)(?: · )*/i, "").trim();
-
 const pad = (value: number) => String(value).padStart(2, "0");
-
-const groupAlerts = (items: LifeAlert[], timeZone: string, today: string): ReminderGroup[] => {
-  const buckets = new Map<string, LifeAlert[]>();
-  for (const alert of items) {
-    const key = isAppointmentAlert(alert) ? `appt:${alert.title}` : alert.id;
-    const list = buckets.get(key) ?? [];
-    list.push(alert);
-    buckets.set(key, list);
-  }
-
-  return [...buckets.values()]
-    .map((alerts) => {
-      const sorted = [...alerts].sort((left, right) => left.cycle.dueAt.localeCompare(right.cycle.dueAt));
-      const dayKeys = [...new Set(sorted.map((alert) => zonedDayKey(new Date(alert.cycle.dueAt), timeZone)))];
-      const representative =
-        sorted.find((alert) => zonedDayKey(new Date(alert.cycle.dueAt), timeZone) >= today) ??
-        sorted[sorted.length - 1] ??
-        sorted[0];
-      return {
-        id: representative.id,
-        representative,
-        alerts: sorted,
-        weekdays: [...new Set(dayKeys.map(weekdayFromKey))].sort((left, right) => left - right)
-      };
-    })
-    .sort((left, right) => left.representative.cycle.dueAt.localeCompare(right.representative.cycle.dueAt));
-};
 
 const subtitleFor = (group: ReminderGroup, timeZone: string) => {
   const alert = group.representative;
-  const dayKeys = new Set(group.alerts.map((item) => zonedDayKey(new Date(item.cycle.dueAt), timeZone)));
-  const parts: string[] = [];
-
-  if (dayKeys.size >= 2 && group.weekdays.length >= 2) {
-    parts.push(formatWeekdays(group.weekdays));
-  } else {
-    parts.push(formatShortDate(alert.cycle.dueAt, timeZone));
+  const clock = zonedClock(alert.cycle.dueAt, timeZone);
+  const parts = [formatShortDate(alert.cycle.dueAt, timeZone)];
+  if (clock.hour || clock.minute) parts.push(`${pad(clock.hour)}:${pad(clock.minute)}`);
+  if (isRecurringAlert(alert) || group.alerts.length > 1) {
+    parts.push(isRecurringAlert(alert) ? frequencyLabel[alert.frequency] : "Próxima ocorrência");
   }
-
-  if (isAppointmentAlert(alert)) {
-    const clock = zonedClock(alert.cycle.dueAt, timeZone);
-    if (clock.hour || clock.minute) parts.push(`${pad(clock.hour)}:${pad(clock.minute)}`);
-  }
-
   if (alert.amount) parts.push(preciseCurrency.format(alert.amount));
-  const notes = cleanNotes(alert.notes);
+  const notes = cleanReminderNotes(alert.notes);
   if (notes) parts.push(notes);
   return parts.join(" · ");
 };
 
 export default function RemindersScreen() {
-  const { plan, loading, refresh, setAlertStatus, deleteAlert } = usePlan();
+  const { plan, loading, refresh, completeAlert, setAlertStatus, deleteAlert } = usePlan();
   const { openSheet } = useUI();
+  const { held, hold } = useHeldComplete();
   const [filter, setFilter] = useState<Filter>("all");
   const timeZone = plan?.secretary?.settings.timezone || plan?.routine?.settings.timezone || "America/Sao_Paulo";
   const today = todayKey();
@@ -173,12 +114,13 @@ export default function RemindersScreen() {
 
   const groups = useMemo(() => {
     const items = normalizeSecretaryModuleState(plan?.secretary).alerts.filter((alert) => {
+      if (isAgendaLinkedAlert(alert)) return false;
       if (alert.status === "cancelled" || alert.status === "completed") return false;
       const key = zonedDayKey(new Date(alert.cycle.dueAt), timeZone);
       const overdue = key < today && alert.status === "active";
       return key.startsWith(currentMonth) || overdue;
     });
-    return groupAlerts(items, timeZone, today);
+    return groupReminderAlerts(items, timeZone, today);
   }, [currentMonth, plan?.secretary, timeZone, today]);
 
   const alertMatches = (alert: LifeAlert) => {
@@ -227,14 +169,20 @@ export default function RemindersScreen() {
 
   const openActions = (group: ReminderGroup) => {
     const next = group.representative;
-    const series = group.alerts.length > 1;
+    const series = isRecurringAlert(next) || group.alerts.length > 1;
     const buttons: Array<{ text: string; style?: "cancel" | "destructive"; onPress?: () => void }> = [];
     if (next.status === "active") {
       buttons.push({
-        text: series ? "Concluir próxima" : "Concluir",
-        onPress: () => void setAlertStatus(next.id, "completed")
+        text: series ? "Concluir esta ocorrência" : "Concluir",
+        onPress: () => hold(next.id, () => completeAlert(next.id))
       });
       buttons.push({ text: "Pausar", onPress: () => void applyStatus(group.alerts, "paused") });
+      if (series) {
+        buttons.push({
+          text: "Encerrar série",
+          onPress: () => hold(next.id, () => applyStatus(group.alerts, "completed"))
+        });
+      }
     } else {
       buttons.push({ text: "Reativar", onPress: () => void applyStatus(group.alerts, "active") });
     }
@@ -323,7 +271,9 @@ export default function RemindersScreen() {
                         group={group}
                         timeZone={timeZone}
                         urgent
+                        completing={Boolean(held[group.representative.id])}
                         onPress={() => openActions(group)}
+                        onComplete={() => hold(group.representative.id, () => completeAlert(group.representative.id))}
                       />
                     ))}
                   </View>
@@ -340,7 +290,9 @@ export default function RemindersScreen() {
                         group={group}
                         timeZone={timeZone}
                         urgent={false}
+                        completing={Boolean(held[group.representative.id])}
                         onPress={() => openActions(group)}
+                        onComplete={() => hold(group.representative.id, () => completeAlert(group.representative.id))}
                       />
                     ))}
                   </View>
@@ -357,53 +309,75 @@ function ReminderCard({
   group,
   timeZone,
   urgent,
-  onPress
+  completing,
+  onPress,
+  onComplete
 }: {
   group: ReminderGroup;
   timeZone: string;
   urgent: boolean;
+  completing: boolean;
   onPress: () => void;
+  onComplete: () => void;
 }) {
   const Icon = iconFor(group.representative);
+  const done =
+    completing || group.representative.status === "completed" || group.representative.cycle.status === "paid";
   return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: cardBorder,
-        borderRadius: 20,
-        padding: 16,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12
-      }}
-    >
-      <View
+    <FadeOnComplete active={completing}>
+      <Pressable
+        onPress={onPress}
         style={{
-          width: 40,
-          height: 40,
-          borderRadius: 12,
-          backgroundColor: "#F3F4F6",
+          backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: cardBorder,
+          borderRadius: 20,
+          padding: 16,
+          flexDirection: "row",
           alignItems: "center",
-          justifyContent: "center"
+          gap: 12
         }}
       >
-        <Icon size={18} color={iconBlack} strokeWidth={2} />
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={{ fontSize: 14, fontFamily: fonts.regular, color: colors.text }}>{group.representative.title}</Text>
-        <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: muted }}>{subtitleFor(group, timeZone)}</Text>
-      </View>
-      <View
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: 4,
-          backgroundColor: urgent ? colors.warning : muted,
-          opacity: urgent ? 1 : 0.3
-        }}
-      />
-    </Pressable>
+        <AnimatedCheck
+          checked={done}
+          onPress={onComplete}
+          accessibilityLabel={`Concluir ${group.representative.title}`}
+        />
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            backgroundColor: "#F3F4F6",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          <Icon size={18} color={iconBlack} strokeWidth={2} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text
+            style={{
+              fontSize: 14,
+              fontFamily: fonts.regular,
+              color: done ? muted : colors.text,
+              textDecorationLine: done ? "line-through" : "none"
+            }}
+          >
+            {group.representative.title}
+          </Text>
+          <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: muted }}>{subtitleFor(group, timeZone)}</Text>
+        </View>
+        <View
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: urgent ? colors.warning : muted,
+            opacity: urgent ? 1 : 0.3
+          }}
+        />
+      </Pressable>
+    </FadeOnComplete>
   );
 }

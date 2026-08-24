@@ -1,5 +1,6 @@
 import { parseAgendaCommand, type ParsedAgendaCommand } from "./agenda-command.js";
 import {
+  addManualAlert,
   addManualExpense,
   addRecurringExpense,
   expenseCategoryLabel,
@@ -779,6 +780,14 @@ export const applySecretaryInboxToPlan = (
         replies.push(
           `Pronto. Registrei *${added.transaction.merchant}* de *R$ ${amount}* em ${expenseCategoryLabel(added.transaction.category)}, em *${when}*.`
         );
+        continue;
+      }
+      if (intent.type === "add_alert") {
+        const added = addManualAlert(next, intent, now, secretary.settings.timezone);
+        next = added.plan;
+        const when = formatDayMonth(added.alert.cycle.dueAt, secretary.settings.timezone);
+        replies.push(`Pronto. Cadastrei o lembrete *${added.alert.title}* para *${when}*.`);
+        matchedAlertId = added.alert.id;
         continue;
       }
       if (intent.type === "enable_reminders") {

@@ -20,6 +20,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="finance" options={{ title: "Financeiro" }} />
         <Tabs.Screen name="market" options={{ title: "Mercado", href: canSeeMarket ? undefined : null }} />
         <Tabs.Screen name="reminders" options={{ title: "Lembretes" }} />
+        <Tabs.Screen name="tasks" options={{ title: "Tarefas" }} />
         <Tabs.Screen name="agenda" options={{ title: "Agenda" }} />
       </Tabs>
       <AppSheets />

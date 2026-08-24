@@ -3,6 +3,7 @@ import {
   applyShoppingInboxToPlan,
   completeAlertOccurrence,
   createLifeAlert,
+  relatedSecretaryAlertIds,
   extractVerificationCode,
   findShoppingListByGroupJid,
   normalizeHomeModuleState,
@@ -186,10 +187,11 @@ export const completePlanAlert = async (repository: PlanRepository, planId: stri
     const plan = await repository.get(planId);
     const current = await readState(repository, planId);
     const timeZone = current.settings.timezone || plan.routine?.settings.timezone || "America/Sao_Paulo";
+    const related = new Set(relatedSecretaryAlertIds(current.alerts, alertId));
     return saveState(repository, planId, {
       ...current,
       alerts: current.alerts.map((alert) =>
-        alert.id === alertId ? completeAlertOccurrence(alert, new Date(), timeZone) : alert
+        related.has(alert.id) ? completeAlertOccurrence(alert, new Date(), timeZone) : alert
       )
     });
   });

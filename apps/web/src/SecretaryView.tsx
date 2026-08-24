@@ -608,21 +608,31 @@ export function SecretaryView({
             </div>
           </header>
           <div className="item-list">
-            {(snapshot?.alerts ?? []).length === 0 && <p className="panel-note">Nenhum lembrete ainda. Comece pela internet, imposto ou salario.</p>}
+            {(snapshot?.alerts ?? []).length === 0 && (
+              <div className="empty-state">
+                <span>Nenhum lembrete ainda</span>
+                <small>Comece pela internet, imposto ou salario.</small>
+              </div>
+            )}
             {(snapshot?.alerts ?? []).map((alert) => (
               <div className="editable-item" key={alert.id}>
-                <div className="secretary-alert">
-                  <strong>{alert.title}</strong>
-                  <span>
-                    {alertKindLabels[alert.kind]} · {frequencyLabel[alert.frequency]} · {cycleLabel[alert.cycle.status]}
-                    {alert.amount ? ` · ${preciseCurrency.format(alert.amount)}` : ""}
-                    {alert.status === "paused" ? " · pausado" : ""}
-                    {alert.status === "completed" ? " · encerrado" : ""}
+                <div className="list-row">
+                  <span className="list-row-icon">
+                    <Bell size={18} />
                   </span>
-                  <small>
-                    Vence {formatWhen(alert.cycle.dueAt)} · lembrete {formatWhen(alert.cycle.remindAt)}
-                    {alert.cycle.snoozeUntil ? ` · volta ${formatWhen(alert.cycle.snoozeUntil)}` : ""}
-                  </small>
+                  <div className="list-row-copy secretary-alert">
+                    <strong>{alert.title}</strong>
+                    <span>
+                      {alertKindLabels[alert.kind]} · {frequencyLabel[alert.frequency]} · {cycleLabel[alert.cycle.status]}
+                      {alert.amount ? ` · ${preciseCurrency.format(alert.amount)}` : ""}
+                      {alert.status === "paused" ? " · pausado" : ""}
+                      {alert.status === "completed" ? " · encerrado" : ""}
+                    </span>
+                    <small>
+                      Vence {formatWhen(alert.cycle.dueAt)} · lembrete {formatWhen(alert.cycle.remindAt)}
+                      {alert.cycle.snoozeUntil ? ` · volta ${formatWhen(alert.cycle.snoozeUntil)}` : ""}
+                    </small>
+                  </div>
                 </div>
                 <div className="secretary-alert-actions">
                   <button className="icon-button labeled" type="button" onClick={() => setDraft(draftFromAlert(alert))}>

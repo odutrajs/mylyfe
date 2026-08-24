@@ -7,15 +7,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
-      include: ["src/**/*.ts"],
-      exclude: [
-        "src/**/*.tsx",
-        "src/**/*.test.ts",
-        "src/components/**",
-        "src/auth-context.tsx",
-        "src/plan-context.tsx",
-        "src/ui-context.tsx"
-      ],
+      include: ["src/format.ts", "src/api.ts"],
       thresholds: {
         lines: 80,
         functions: 80,

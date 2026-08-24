@@ -1,7 +1,14 @@
-import { parseAgendaCommand } from "./agenda-command.js";
+import { parseAgendaCommand, parseReminderCommand } from "./agenda-command.js";
 import { classifyTransaction } from "./classification.js";
-import { addDays, weekdayIndex, zonedDate, zonedParts } from "./secretary.js";
-import type { ExpenseCategory, FinancePlan, HealthAppointmentKind, RecurringTransaction } from "./types.js";
+import { addDays, createLifeAlert, normalizeSecretaryModuleState, weekdayIndex, zonedDate, zonedParts } from "./secretary.js";
+import type {
+  AlertFrequency,
+  AlertKind,
+  ExpenseCategory,
+  FinancePlan,
+  HealthAppointmentKind,
+  RecurringTransaction
+} from "./types.js";
 
 export type SecretaryIntent =
   | {
@@ -40,6 +47,18 @@ export type SecretaryIntent =
       date?: string;
       category?: ExpenseCategory;
       frequency?: RecurringTransaction["frequency"];
+    }
+  | {
+      type: "add_alert";
+      title: string;
+      kind?: AlertKind;
+      frequency?: AlertFrequency;
+      dueDate?: string;
+      weekday?: number;
+      dueDay?: number;
+      preferredHour?: number;
+      category?: ExpenseCategory;
+      notes?: string;
     }
   | {
       type: "enable_reminders";
@@ -272,11 +291,14 @@ export const interpretSecretaryMessage = (
 ): SecretaryIntent[] => {
   if (isClearAlertReply(text)) return [{ type: "alert_reply" }];
 
-  const agenda = parseAgendaCommand(text, now, timeZone);
-  if (agenda) return intentsFromAgenda(agenda);
-
   const expense = parseExpense(text, now, timeZone);
   if (expense) return [expense];
+
+  const reminder = parseReminderCommand(text, now, timeZone);
+  if (reminder) return [{ type: "add_alert", ...reminder }];
+
+  const agenda = parseAgendaCommand(text, now, timeZone);
+  if (agenda) return intentsFromAgenda(agenda);
 
   const normalized = fold(text);
   if (/\b(quero aviso|pode avisar|me avisa|quero lembrete)\b/.test(normalized) && !/\b(amanha|depois)\b/.test(normalized)) {
@@ -342,13 +364,16 @@ export const sanitizeSecretaryIntents = (
 ): SecretaryIntent[] => {
   const localAgenda = parseAgendaCommand(text, now, timeZone);
   const localExpense = parseExpense(text, now, timeZone);
-  let source = localAgenda
-    ? intentsFromAgenda(localAgenda)
-    : localExpense
-      ? [localExpense]
-      : intents.some((intent) => intent.type === "alert_reply") && !isClearAlertReply(text)
-        ? intents.filter((intent) => intent.type !== "alert_reply")
-        : intents;
+  const localReminder = parseReminderCommand(text, now, timeZone);
+  let source = localExpense
+    ? [localExpense]
+    : localReminder
+      ? [{ type: "add_alert" as const, ...localReminder }]
+      : localAgenda
+        ? intentsFromAgenda(localAgenda)
+        : intents.some((intent) => intent.type === "alert_reply") && !isClearAlertReply(text)
+          ? intents.filter((intent) => intent.type !== "alert_reply")
+          : intents;
   if (!source.length) {
     source = [
       {
@@ -424,6 +449,44 @@ export const addManualExpense = (
       transactions: [...(plan.transactions ?? []), transaction]
     },
     transaction
+  };
+};
+
+export const addManualAlert = (
+  plan: FinancePlan,
+  intent: Extract<SecretaryIntent, { type: "add_alert" }>,
+  now = new Date(),
+  timeZone = "America/Sao_Paulo"
+) => {
+  const secretary = normalizeSecretaryModuleState(plan.secretary);
+  const alert = createLifeAlert(
+    {
+      title: intent.title,
+      kind: intent.kind ?? "one_off",
+      category: intent.category,
+      notes: intent.notes,
+      frequency: intent.frequency ?? "once",
+      dueDate: intent.dueDate,
+      weekday: intent.weekday,
+      dueDay: intent.dueDay,
+      preferredHour: intent.preferredHour ?? 9,
+      remindDaysBefore: intent.frequency === "daily" || intent.kind === "habit" ? 0 : 1,
+      askIfPaid: intent.kind === "bill" || intent.kind === "tax" || intent.kind === "subscription"
+    },
+    now,
+    timeZone
+  );
+
+  return {
+    plan: {
+      ...plan,
+      secretary: {
+        ...secretary,
+        alerts: [...secretary.alerts, alert],
+        updatedAt: now.toISOString()
+      }
+    },
+    alert
   };
 };
 

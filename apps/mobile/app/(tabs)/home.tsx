@@ -1,6 +1,8 @@
 import {
   analyzePlan,
+  calculateMonthlyCashFlow,
   eventsForDay,
+  formatMonthKey,
   normalizeRoutineModuleState,
   normalizeSecretaryModuleState,
   zonedClock,
@@ -9,14 +11,15 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useMemo, useRef } from "react";
-import { Check } from "lucide-react-native";
 import { Animated, Image, Platform, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../src/auth-context";
+import { AnimatedCheck, FadeOnComplete, useHeldComplete } from "../../src/components/AnimatedCheck";
 import { ProfileButton } from "../../src/components/ProfileButton";
 import { SpendRing } from "../../src/components/SpendRing";
 import { currency, firstName, preciseCurrency, reminderWhen, todayKey } from "../../src/format";
 import { usePlan } from "../../src/plan-context";
+import { cleanReminderNotes, homeReminderGroups } from "../../src/reminder-groups";
 import { colors, fonts, radius } from "../../src/theme";
 
 const mascotLeft = require("../../assets/home/mascot-left.png");
@@ -55,7 +58,8 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { session } = useAuth();
-  const { plan, events, loading, refresh, updatePlan } = usePlan();
+  const { plan, events, loading, refresh, updatePlan, completeAlert } = usePlan();
+  const { held, hold } = useHeldComplete();
   const scrollY = useRef(new Animated.Value(0)).current;
   const asOf = useMemo(() => new Date(), []);
   const today = todayKey();
@@ -63,7 +67,10 @@ export default function HomeScreen() {
   const name = firstName(plan?.profile.people.find((person) => person.role === "primary")?.name || session?.name);
 
   const analysis = useMemo(() => (plan ? analyzePlan(plan, asOf) : null), [asOf, plan]);
-  const income = analysis?.income.recurringMonthly ?? 0;
+  const income = useMemo(
+    () => (plan ? calculateMonthlyCashFlow(plan, formatMonthKey(asOf)).income : 0),
+    [asOf, plan]
+  );
   const monthlySpend =
     (analysis?.spending.currentMonthSpend ?? 0) > 0
       ? (analysis?.spending.currentMonthSpend ?? 0)
@@ -71,14 +78,10 @@ export default function HomeScreen() {
   const saved = Math.max(0, income - monthlySpend);
   const saveRate = income > 0 ? saved / income : 0;
 
-  const reminders = useMemo(() => {
-    const alerts = normalizeSecretaryModuleState(plan?.secretary).alerts.filter((alert) => alert.status === "active");
-    const dueToday = alerts.filter((alert) => zonedDayKey(new Date(alert.cycle.dueAt), timeZone) === today);
-    const upcoming = alerts
-      .filter((alert) => !dueToday.includes(alert))
-      .sort((left, right) => left.cycle.dueAt.localeCompare(right.cycle.dueAt));
-    return [...dueToday, ...upcoming].slice(0, 2);
-  }, [plan?.secretary, timeZone, today]);
+  const reminders = useMemo(
+    () => homeReminderGroups(normalizeSecretaryModuleState(plan?.secretary).alerts, timeZone, today),
+    [plan?.secretary, timeZone, today]
+  );
 
   const agenda = useMemo(
     () => eventsForDay(events.filter((event) => event.status !== "cancelled"), today, timeZone).slice(0, 3),
@@ -137,7 +140,7 @@ export default function HomeScreen() {
     extrapolate: "clamp"
   });
 
-  const toggleTask = (taskId: string) => {
+  const persistToggle = (taskId: string) => {
     void updatePlan((current) => {
       const routine = normalizeRoutineModuleState(current.routine);
       const now = new Date().toISOString();
@@ -152,6 +155,14 @@ export default function HomeScreen() {
         }
       };
     });
+  };
+
+  const toggleTask = (taskId: string, done: boolean) => {
+    if (done) {
+      persistToggle(taskId);
+      return;
+    }
+    hold(taskId, () => persistToggle(taskId));
   };
 
   return (
@@ -251,7 +262,7 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
         contentContainerStyle={{ paddingTop: compact, paddingBottom: 120 + insets.bottom }}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void refresh()} progressViewOffset={compact} />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void refresh({ calendars: true })} progressViewOffset={compact} />}
         keyboardShouldPersistTaps="handled"
       >
         <View style={{ height: collapse }} />
@@ -318,32 +329,53 @@ export default function HomeScreen() {
                 <Text style={{ marginTop: 2, fontFamily: fonts.regular, fontSize: 12, color: muted }}>Pode seguir o dia tranquilo.</Text>
               </View>
             ) : (
-              reminders.map((alert) => (
-                <Pressable
-                  key={alert.id}
-                  onPress={() => router.push("/(tabs)/reminders")}
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderWidth: 1,
-                    borderColor: cardBorder,
-                    borderRadius: 20,
-                    padding: 16,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12
-                  }}
-                >
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={{ fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, letterSpacing: 0.1, color: colors.text }}>
-                      {alert.title}
-                    </Text>
-                    <Text style={{ fontFamily: fonts.regular, fontSize: 12, lineHeight: 18, color: muted }}>
-                      {alert.amount ? preciseCurrency.format(alert.amount) : alert.notes || reminderWhen(alert)}
-                    </Text>
-                  </View>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warning }} />
-                </Pressable>
-              ))
+              reminders.map((group) => {
+                const alert = group.representative;
+                return (
+                <FadeOnComplete key={group.id} active={Boolean(held[alert.id])}>
+                  <Pressable
+                    onPress={() => router.push("/(tabs)/reminders")}
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderWidth: 1,
+                      borderColor: cardBorder,
+                      borderRadius: 20,
+                      padding: 16,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12
+                    }}
+                  >
+                    <AnimatedCheck
+                      checked={Boolean(held[alert.id])}
+                      onPress={() => hold(alert.id, () => completeAlert(alert.id))}
+                      accessibilityLabel={`Concluir ${alert.title}`}
+                      borderColor="rgba(16,42,76,0.25)"
+                    />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text
+                        style={{
+                          fontFamily: fonts.medium,
+                          fontSize: 14,
+                          lineHeight: 20,
+                          letterSpacing: 0.1,
+                          color: held[alert.id] ? muted : colors.text,
+                          textDecorationLine: held[alert.id] ? "line-through" : "none"
+                        }}
+                      >
+                        {alert.title}
+                      </Text>
+                      <Text style={{ fontFamily: fonts.regular, fontSize: 12, lineHeight: 18, color: muted }}>
+                        {alert.amount
+                          ? preciseCurrency.format(alert.amount)
+                          : cleanReminderNotes(alert.notes) || reminderWhen(alert)}
+                      </Text>
+                    </View>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warning }} />
+                  </Pressable>
+                </FadeOnComplete>
+                );
+              })
             )}
           </View>
 
@@ -386,10 +418,10 @@ export default function HomeScreen() {
                       >
                         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tint }} />
                         <View style={{ flex: 1, gap: 2 }}>
-                          <Text style={{ fontFamily: fonts.bold, fontSize: 12, lineHeight: 17, letterSpacing: 0.1, color: tint }}>
+                          <Text style={{ fontFamily: fonts.regular, fontSize: 12, lineHeight: 17, letterSpacing: 0.1, color: tint }}>
                             {time}
                           </Text>
-                          <Text style={{ fontFamily: fonts.semibold, fontSize: 14, lineHeight: 20, letterSpacing: 0.1, color: colors.text }}>
+                          <Text style={{ fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, letterSpacing: 0.1, color: colors.text }}>
                             {event.title}
                           </Text>
                           {event.location ? (
@@ -407,7 +439,9 @@ export default function HomeScreen() {
           <View style={{ gap: 12 }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4, minHeight: 15 }}>
               <Text style={sectionTitleStyle}>Tarefas do dia</Text>
-              <Text style={sectionLinkStyle}>Ver todas</Text>
+              <Pressable onPress={() => router.push("/(tabs)/tasks")} hitSlop={8}>
+                <Text style={sectionLinkStyle}>Ver todas</Text>
+              </Pressable>
             </View>
             <View
               style={{
@@ -427,23 +461,17 @@ export default function HomeScreen() {
               ) : (
                 <>
                   {tasks.map((task) => {
-                    const done = task.status === "done";
+                    const done = task.status === "done" || Boolean(held[task.id]);
                     return (
-                      <Pressable key={task.id} onPress={() => toggleTask(task.id)} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                        <View
-                          style={{
-                            width: 22,
-                            height: 22,
-                            borderRadius: 6,
-                            alignItems: "center",
-                            justifyContent: "center",
-                            backgroundColor: done ? colors.success : "transparent",
-                            borderWidth: done ? 0 : 1.5,
-                            borderColor: "rgba(16,42,76,0.25)"
-                          }}
-                        >
-                          {done ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
-                        </View>
+                      <Pressable key={task.id} onPress={() => toggleTask(task.id, task.status === "done")} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                        <AnimatedCheck
+                          checked={done}
+                          onPress={() => toggleTask(task.id, task.status === "done")}
+                          size={22}
+                          radius={6}
+                          accessibilityLabel={`${done ? "Reabrir" : "Concluir"} ${task.title}`}
+                          borderColor="rgba(16,42,76,0.25)"
+                        />
                         <Text
                           style={{
                             flex: 1,

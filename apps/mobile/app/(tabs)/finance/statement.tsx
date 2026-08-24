@@ -1,8 +1,15 @@
-import type { CategoryExpenseItem, ExpenseCategory } from "@mylyfe/domain";
-import { addDaysToKey, analyzePlan, dateFromMonthKey, formatMonthKey, listCategoryExpensesInMonth } from "@mylyfe/domain";
+import type { ExpenseCategory } from "@mylyfe/domain";
+import {
+  addDaysToKey,
+  calculateMonthlyCashFlow,
+  formatMonthKey,
+  listCategoryExpensesInMonth,
+  listMonthIncomes
+} from "@mylyfe/domain";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
+  ArrowUp,
   Briefcase,
   Bus,
   ChevronLeft,
@@ -23,11 +30,23 @@ import { useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MascotEmpty } from "../../../src/components/Mascot";
-import { currency, frequencyLabel, monthTitle, preciseCurrency, todayKey } from "../../../src/format";
+import { SpendCoachSheet } from "../../../src/components/SpendCoachSheet";
+import { StatementEntrySheet, type StatementEntryRef } from "../../../src/components/StatementEntrySheet";
+import { frequencyLabel, monthTitle, preciseCurrency, todayKey } from "../../../src/format";
 import { usePlan } from "../../../src/plan-context";
 import { colors, fonts } from "../../../src/theme";
 
-type StatementRow = CategoryExpenseItem & { category: ExpenseCategory };
+type StatementFilter = ExpenseCategory | "all" | "income";
+type StatementRow = {
+  id: string;
+  name: string;
+  amount: number;
+  date?: string;
+  kind: "transaction" | "recurring" | "forecast" | "income";
+  category: ExpenseCategory | "income";
+  direction: "in" | "out";
+  installment?: { current: number; total: number };
+};
 
 const muted = "#808080";
 const cardBorder = "rgba(0, 0, 0, 0.05)";
@@ -47,7 +66,8 @@ const badgeTint: Record<string, string> = {
   company: "#E8F9F0",
   investments: "#E8F9F0",
   thirdParty: "#F3F4F6",
-  other: "#F3F4F6"
+  other: "#F3F4F6",
+  income: "#E8F9F0"
 };
 
 const normalize = (value: string) =>
@@ -71,6 +91,7 @@ const categoryIcon = (category: string, name: string) => {
   if (category === "company") return Briefcase;
   if (category === "thirdParty") return Users;
   if (category === "investments") return TrendingUp;
+  if (category === "income") return ArrowUp;
   return Sparkles;
 };
 
@@ -99,20 +120,15 @@ export default function StatementScreen() {
   const router = useRouter();
   const { month: monthParam } = useLocalSearchParams<{ month?: string }>();
   const { plan, loading, refresh } = usePlan();
-  const [filter, setFilter] = useState<ExpenseCategory | "all">("all");
+  const [filter, setFilter] = useState<StatementFilter>("all");
+  const [selected, setSelected] = useState<StatementEntryRef | null>(null);
+  const [coachOpen, setCoachOpen] = useState(false);
   const month = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : formatMonthKey(new Date());
-  const currentMonth = formatMonthKey(new Date());
-  const asOf = month === currentMonth ? new Date() : dateFromMonthKey(month);
   const today = todayKey();
   const categories = plan?.expenseCategories?.filter((item) => item.isActive) ?? [];
-  const categoryName = (id: string) => categories.find((item) => item.id === id)?.name ?? id;
+  const categoryName = (id: string) => (id === "income" ? "Ganhos" : (categories.find((item) => item.id === id)?.name ?? id));
 
-  const analysis = useMemo(() => (plan ? analyzePlan(plan, asOf) : null), [asOf, plan]);
-  const limit =
-    plan?.budget.monthlyExpenseTarget ||
-    analysis?.categoryBudgetPlan.expenseEnvelope ||
-    analysis?.budgetSuggestion.monthlyExpenseTarget ||
-    0;
+  const income = useMemo(() => (plan ? calculateMonthlyCashFlow(plan, month).income : 0), [month, plan]);
 
   const rows = useMemo(() => {
     if (!plan) return [];
@@ -127,8 +143,21 @@ export default function StatementScreen() {
       for (const item of listCategoryExpensesInMonth(plan, month, category)) {
         if (seen.has(item.id)) continue;
         seen.add(item.id);
-        next.push({ ...item, category });
+        next.push({ ...item, category, direction: "out" });
       }
+    }
+    for (const item of listMonthIncomes(plan, month)) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      next.push({
+        id: item.id,
+        name: item.name,
+        amount: item.amount,
+        date: item.date,
+        kind: item.kind === "recurring" ? "recurring" : "income",
+        category: "income",
+        direction: "in"
+      });
     }
     return next;
   }, [categories, month, plan]);
@@ -137,17 +166,19 @@ export default function StatementScreen() {
     const counts = new Map<string, number>();
     for (const item of rows) counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
     return [...counts.entries()]
-      .sort((left, right) => right[1] - left[1] || categoryName(left[0]).localeCompare(categoryName(right[0]), "pt-BR"))
+      .sort((left, right) => {
+        if (left[0] === "income") return -1;
+        if (right[0] === "income") return 1;
+        return right[1] - left[1] || categoryName(left[0]).localeCompare(categoryName(right[0]), "pt-BR");
+      })
       .map(([id]) => ({ id, label: categoryName(id) }));
   }, [categories, rows]);
 
   const visible = filter === "all" ? rows : rows.filter((item) => item.category === filter);
-  const fixedItems = visible.filter((item) => item.kind === "recurring");
+  const fixedIncome = visible.filter((item) => item.direction === "in" && item.kind === "recurring");
+  const fixedItems = visible.filter((item) => item.direction === "out" && item.kind === "recurring");
   const dailyItems = visible.filter((item) => item.kind !== "recurring");
-  const spent = rows.reduce((sum, item) => sum + item.amount, 0);
-  const percent = limit > 0 ? Math.min(spent / limit, 1) : 0;
-  const percentLabel = limit > 0 ? Math.round((spent / limit) * 100) : 0;
-  const over = limit > 0 && spent > limit;
+  const spent = rows.filter((item) => item.direction === "out").reduce((sum, item) => sum + item.amount, 0);
 
   const groups = useMemo(() => {
     const buckets = new Map<string, StatementRow[]>();
@@ -162,6 +193,9 @@ export default function StatementScreen() {
   }, [dailyItems]);
 
   const subtitleFor = (item: StatementRow) => {
+    if (item.direction === "in") {
+      return item.kind === "recurring" ? "Ganho • Todo mês" : "Ganho";
+    }
     const parts = [categoryName(item.category)];
     if (item.kind === "recurring") {
       const recurring = plan?.recurringTransactions?.find((entry) => `rec-${entry.id}` === item.id);
@@ -200,7 +234,7 @@ export default function StatementScreen() {
             <ChevronLeft size={20} color="#FFFFFF" />
           </Pressable>
           <Text style={{ fontSize: 16, fontFamily: fonts.regular, color: "#FFFFFF" }}>
-            Gastos de {prettyMonthName(month)}
+            Extrato de {prettyMonthName(month)}
           </Text>
           <View style={{ width: 32 }} />
         </LinearGradient>
@@ -225,25 +259,35 @@ export default function StatementScreen() {
             <Text style={{ fontSize: 14, fontFamily: fonts.regular, color: muted }}>Total gasto</Text>
             <Text style={{ fontSize: 32, fontFamily: fonts.regular, color: colors.text }}>{preciseCurrency.format(spent)}</Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: muted }}>
-              Orçamento: {currency.format(limit)}
-            </Text>
-            <View style={{ width: 1, height: 12, backgroundColor: cardBorder }} />
-            <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: over ? colors.danger : colors.accent }}>
-              {percentLabel}% do limite
-            </Text>
-          </View>
+          <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: colors.success }}>
+            Ganhos {preciseCurrency.format(income)}
+          </Text>
           <View style={{ height: 8, borderRadius: 100, backgroundColor: "#F3F4F6", overflow: "hidden" }}>
             <View
               style={{
                 height: "100%",
-                width: `${Math.round(percent * 100)}%`,
+                width: `${income > 0 ? Math.round(Math.min(spent / income, 1) * 100) : 0}%`,
                 borderRadius: 100,
-                backgroundColor: over ? colors.danger : colors.success
+                backgroundColor: income > 0 && spent > income ? colors.danger : colors.success
               }}
             />
           </View>
+          <Pressable
+            onPress={() => setCoachOpen(true)}
+            accessibilityLabel="Analisar custos"
+            style={{
+              height: 48,
+              borderRadius: 100,
+              backgroundColor: colors.accent,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8
+            }}
+          >
+            <Sparkles size={16} color="#FFFFFF" />
+            <Text style={{ fontSize: 15, fontFamily: fonts.semibold, color: "#FFFFFF" }}>Analisar custos</Text>
+          </Pressable>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -253,24 +297,29 @@ export default function StatementScreen() {
               key={item.id}
               label={item.label}
               active={filter === item.id}
-              onPress={() => setFilter(item.id)}
+              onPress={() => setFilter(item.id as StatementFilter)}
             />
           ))}
         </ScrollView>
 
         {visible.length === 0 ? (
-          <MascotEmpty title="Nenhum gasto neste mês" caption="Quando lançar uma despesa, ela aparece aqui." mood="think" />
+          <MascotEmpty title="Nenhum lançamento neste mês" caption="Quando lançar uma entrada ou despesa, ela aparece aqui." mood="think" />
         ) : (
           <View style={{ gap: 20 }}>
+            {fixedIncome.length > 0 ? (
+              <ExpenseGroup title="Ganhos fixos" items={fixedIncome} subtitleFor={subtitleFor} onPress={setSelected} />
+            ) : null}
             {fixedItems.length > 0 ? (
-              <ExpenseGroup title="Gastos fixos" items={fixedItems} subtitleFor={subtitleFor} />
+              <ExpenseGroup title="Gastos fixos" items={fixedItems} subtitleFor={subtitleFor} onPress={setSelected} />
             ) : null}
             {groups.map(([key, items]) => (
-              <ExpenseGroup key={key} title={groupLabel(key, today)} items={items} subtitleFor={subtitleFor} />
+              <ExpenseGroup key={key} title={groupLabel(key, today)} items={items} subtitleFor={subtitleFor} onPress={setSelected} />
             ))}
           </View>
         )}
       </ScrollView>
+      <StatementEntrySheet entry={selected} onClose={() => setSelected(null)} />
+      <SpendCoachSheet month={month} visible={coachOpen} onClose={() => setCoachOpen(false)} />
     </View>
   );
 }
@@ -278,11 +327,13 @@ export default function StatementScreen() {
 function ExpenseGroup({
   title,
   items,
-  subtitleFor
+  subtitleFor,
+  onPress
 }: {
   title: string;
   items: StatementRow[];
   subtitleFor: (item: StatementRow) => string;
+  onPress: (item: StatementRow) => void;
 }) {
   return (
     <View style={{ gap: 10 }}>
@@ -301,7 +352,8 @@ function ExpenseGroup({
           const Icon = categoryIcon(item.category, item.name);
           return (
             <View key={item.id}>
-              <View
+              <Pressable
+                onPress={() => onPress(item)}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
@@ -330,10 +382,17 @@ function ExpenseGroup({
                     <Text style={{ fontSize: 12, fontFamily: fonts.regular, color: muted }}>{subtitleFor(item)}</Text>
                   </View>
                 </View>
-                <Text style={{ fontSize: 15, fontFamily: fonts.regular, color: colors.danger }}>
+                <Text
+                  style={{
+                    fontSize: 15,
+                    fontFamily: fonts.regular,
+                    color: item.direction === "in" ? colors.success : colors.danger
+                  }}
+                >
+                  {item.direction === "in" ? "+" : ""}
                   {preciseCurrency.format(item.amount)}
                 </Text>
-              </View>
+              </Pressable>
               {index < items.length - 1 ? <View style={{ height: 1, backgroundColor: cardBorder }} /> : null}
             </View>
           );

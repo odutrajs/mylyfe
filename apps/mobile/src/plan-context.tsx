@@ -1,8 +1,12 @@
 import type { FinancePlan, LifeAlert, RoutineCalendarEvent, SecretaryModuleState } from "@mylyfe/domain";
-import { mergeAgendaEvents } from "@mylyfe/domain";
+import { completePlanAlertOccurrence, mergeAgendaEvents } from "@mylyfe/domain";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { apiRequest } from "./api";
 import { useAuth } from "./auth-context";
+
+type RefreshOptions = {
+  calendars?: boolean;
+};
 
 type PlanContextValue = {
   plan: FinancePlan | null;
@@ -10,10 +14,12 @@ type PlanContextValue = {
   saving: boolean;
   error: string;
   events: RoutineCalendarEvent[];
-  refresh: () => Promise<void>;
+  refresh: (options?: RefreshOptions) => Promise<void>;
+  syncCalendars: () => Promise<void>;
   savePlan: (next: FinancePlan) => Promise<FinancePlan>;
   updatePlan: (mutator: (current: FinancePlan) => FinancePlan) => Promise<void>;
   upsertAlert: (input: Partial<LifeAlert> & { title: string }) => Promise<void>;
+  completeAlert: (alertId: string) => Promise<void>;
   setAlertStatus: (alertId: string, status: LifeAlert["status"]) => Promise<void>;
   deleteAlert: (alertId: string) => Promise<void>;
 };
@@ -39,40 +45,97 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   const planRef = useRef<FinancePlan | null>(null);
   const savingRef = useRef(false);
   const dirtyRef = useRef(false);
+  const syncPromiseRef = useRef<Promise<void> | null>(null);
+  const lastCalendarSyncAt = useRef(0);
   planRef.current = plan;
 
-  const refresh = useCallback(async () => {
-    if (!session?.planId) {
-      setPlan(null);
-      setEvents([]);
-      return;
-    }
-    setLoading(true);
-    setError("");
-    try {
-      const routinePlanId =
-        session.personalPlanId && session.personalPlanId !== session.planId ? session.personalPlanId : session.planId;
-      const [planResponse, routineResponse] = await Promise.all([
-        apiRequest(`/plans/${session.planId}`),
-        apiRequest(`/plans/${routinePlanId}/routine`).catch(() => null)
-      ]);
-      const nextPlan = (await planResponse.json()) as FinancePlan;
-      setPlan(nextPlan);
-      if (routineResponse) {
-        const routine = (await routineResponse.json()) as {
-          localEvents?: FinancePlan["routine"]["localEvents"];
-          events?: RoutineCalendarEvent[];
-        };
-        setEvents(mergeAgendaEvents(routine.events ?? [], routine.localEvents ?? []));
-      } else {
-        setEvents(mergeAgendaEvents([], []));
+  const routinePlanId = session?.personalPlanId && session.personalPlanId !== session.planId ? session.personalPlanId : session?.planId;
+
+  const applyAgendaEvents = useCallback((remote: RoutineCalendarEvent[], local?: FinancePlan["routine"]["localEvents"]) => {
+    setEvents(mergeAgendaEvents(remote, local ?? planRef.current?.routine.localEvents ?? []));
+  }, []);
+
+  const syncCalendars = useCallback(
+    async (options?: { force?: boolean; reportError?: boolean }) => {
+      if (!routinePlanId) return;
+      if (syncPromiseRef.current) {
+        await syncPromiseRef.current;
+        if (!options?.force) return;
       }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Nao foi possivel carregar seus dados.");
-    } finally {
-      setLoading(false);
-    }
-  }, [session?.planId, session?.personalPlanId]);
+      if (!options?.force && Date.now() - lastCalendarSyncAt.current < 30_000) return;
+
+      const run = (async () => {
+        lastCalendarSyncAt.current = Date.now();
+        try {
+          const response = await apiRequest("/routine/sync", {
+            method: "POST",
+            body: JSON.stringify({ planId: routinePlanId })
+          });
+          const payload = (await response.json()) as { events?: RoutineCalendarEvent[]; errors?: string[] };
+          applyAgendaEvents(payload.events ?? []);
+          if (options?.reportError && payload.errors?.length) {
+            setError(payload.errors.join(" "));
+          }
+        } catch (caught) {
+          lastCalendarSyncAt.current = 0;
+          if (options?.reportError) {
+            setError(caught instanceof Error ? caught.message : "Nao foi possivel atualizar a agenda do e-mail.");
+          }
+        }
+      })();
+
+      syncPromiseRef.current = run;
+      try {
+        await run;
+      } finally {
+        if (syncPromiseRef.current === run) syncPromiseRef.current = null;
+      }
+    },
+    [applyAgendaEvents, routinePlanId]
+  );
+
+  const refresh = useCallback(
+    async (options?: RefreshOptions) => {
+      if (!session?.planId || !routinePlanId) {
+        setPlan(null);
+        setEvents([]);
+        return;
+      }
+      setLoading(true);
+      setError("");
+      try {
+        const [planResponse, routineResponse] = await Promise.all([
+          apiRequest(`/plans/${session.planId}`),
+          apiRequest(`/plans/${routinePlanId}/routine`).catch(() => null)
+        ]);
+        const nextPlan = (await planResponse.json()) as FinancePlan;
+        planRef.current = nextPlan;
+        setPlan(nextPlan);
+        if (routineResponse) {
+          const routine = (await routineResponse.json()) as {
+            localEvents?: FinancePlan["routine"]["localEvents"];
+            events?: RoutineCalendarEvent[];
+            syncedAt?: string;
+          };
+          applyAgendaEvents(routine.events ?? [], routine.localEvents ?? []);
+          const syncedAtMs = routine.syncedAt ? Date.parse(routine.syncedAt) : Number.NaN;
+          if (Number.isFinite(syncedAtMs) && Date.now() - syncedAtMs < 30_000) {
+            lastCalendarSyncAt.current = syncedAtMs;
+          }
+        } else {
+          applyAgendaEvents([]);
+        }
+        if (options?.calendars) {
+          await syncCalendars({ force: true, reportError: true });
+        }
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Nao foi possivel carregar seus dados.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyAgendaEvents, routinePlanId, session?.planId, syncCalendars]
+  );
 
   useEffect(() => {
     void refresh();
@@ -157,6 +220,13 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     [plan, session?.planId]
   );
 
+  const completeAlert = useCallback(
+    async (alertId: string) => {
+      await updatePlan((current) => completePlanAlertOccurrence(current, alertId));
+    },
+    [updatePlan]
+  );
+
   const setAlertStatus = useCallback(
     async (alertId: string, status: LifeAlert["status"]) => {
       if (!session?.planId || !plan) return;
@@ -188,13 +258,15 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       error,
       events,
       refresh,
+      syncCalendars,
       savePlan,
       updatePlan,
       upsertAlert,
+      completeAlert,
       setAlertStatus,
       deleteAlert
     }),
-    [deleteAlert, error, events, loading, plan, refresh, savePlan, saving, setAlertStatus, updatePlan, upsertAlert]
+    [completeAlert, deleteAlert, error, events, loading, plan, refresh, savePlan, saving, setAlertStatus, syncCalendars, updatePlan, upsertAlert]
   );
 
   return <PlanContext.Provider value={value}>{children}</PlanContext.Provider>;
