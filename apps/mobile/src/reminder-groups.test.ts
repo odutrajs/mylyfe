@@ -44,6 +44,11 @@ describe("groupReminderAlerts", () => {
     expect(groups).toHaveLength(2);
     expect(groups.map((group) => group.representative.title).sort()).toEqual(["Conta de luz", "Dentista"]);
     expect(homeReminderGroups([bill, twin, vespera, hour], zone, "2026-08-20").map((group) => group.representative.title)).toEqual([
+      "Dentista",
+      "Conta de luz"
+    ]);
+    expect(homeReminderGroups([bill, twin, vespera, hour], zone, "2026-08-21").map((group) => group.representative.title)).toEqual([
+      "Dentista",
       "Conta de luz"
     ]);
   });

@@ -23,6 +23,8 @@ import {
   saveUser,
   type StoredUser
 } from "./auth-store.js";
+import { ensureBillingCustomer, subscriptionForUser } from "./billing-service.js";
+import { deleteCustomerByUserId, type PublicSubscription } from "./billing-store.js";
 
 const scrypt = promisify(scryptCallback);
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 30;
@@ -43,6 +45,7 @@ export type PublicSession = {
   name: string;
   email: string;
   hasPushToken: boolean;
+  subscription: PublicSubscription;
 };
 
 export type AuthResult = {
@@ -78,13 +81,14 @@ const verifyPassword = async (password: string, salt: string, passwordHash: stri
   return derived.length === expected.length && timingSafeEqual(derived, expected);
 };
 
-const toPublicSession = (user: StoredUser): PublicSession => ({
+const toPublicSession = async (user: StoredUser): Promise<PublicSession> => ({
   userId: user.id,
   planId: user.activePlanId || user.personalPlanId,
   personalPlanId: user.personalPlanId,
   name: user.name,
   email: user.email,
-  hasPushToken: (user.pushTokens?.length ?? 0) > 0
+  hasPushToken: (user.pushTokens?.length ?? 0) > 0,
+  subscription: await subscriptionForUser(user)
 });
 
 const issueSession = async (user: StoredUser): Promise<AuthResult> => {
@@ -98,7 +102,7 @@ const issueSession = async (user: StoredUser): Promise<AuthResult> => {
 
   return {
     token: record.token,
-    session: toPublicSession(user)
+    session: await toPublicSession(user)
   };
 };
 
@@ -195,6 +199,7 @@ export const registerUser = async (
     createdAt: now,
     updatedAt: now
   });
+  await ensureBillingCustomer(user);
 
   return issueSession(user);
 };
@@ -312,8 +317,16 @@ export const sessionFromToken = async (header?: string) => {
   return {
     token,
     user,
-    session: toPublicSession(user)
+    session: await toPublicSession(user)
   };
+};
+
+export const requirePaidSession = async (header?: string) => {
+  const current = await sessionFromToken(header);
+  if (!current.session.subscription.accessGranted) {
+    throw new AuthError("Assine para liberar o aplicativo.", 402);
+  }
+  return current;
 };
 
 export const logoutUser = async (header?: string) => {
@@ -325,6 +338,7 @@ export const deleteUserAccount = async (repository: PlanRepository, header?: str
   const current = await sessionFromToken(header);
   const planId = current.user.personalPlanId || current.user.id;
   await repository.remove(planId);
+  await deleteCustomerByUserId(current.user.id);
   await deleteUser(current.user.id);
 };
 
@@ -369,6 +383,6 @@ export const updateAuthSession = async (
 
   return {
     token: current.token,
-    session: toPublicSession(user)
+    session: await toPublicSession(user)
   };
 };

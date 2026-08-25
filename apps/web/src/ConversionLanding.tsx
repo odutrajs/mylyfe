@@ -1,15 +1,8 @@
 import { Bell, Lock, Mail, MessageCircle, Smartphone, User, WalletCards } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { AuthButton, AuthChrome, AuthFooter, FloatingField, zeloMascotSrc } from "./auth-ui";
-import { apiRequest } from "./lib";
-
-type UserSession = {
-  userId: string;
-  planId: string;
-  name: string;
-  email: string;
-  personalPlanId?: string;
-};
+import { goToBillingCheckout, planPriceLabel, sessionHasAccess, type AuthedSession } from "./BillingPaywall";
+import { apiRequest, writeAuthToken } from "./lib";
 
 const proofs = [
   {
@@ -30,9 +23,28 @@ const proofs = [
 ] as const;
 
 const steps = [
-  { n: "1", title: "Preenche o cadastro", text: "Nome, WhatsApp, e-mail e senha. Menos de um minuto." },
-  { n: "2", title: "Acesso liberado", text: "A conta nasce no servidor e o MyLyfe destrava pra você." },
-  { n: "3", title: "O app acompanha", text: "Financeiro, secretaria e rotina passam a viver no mesmo lugar." }
+  { n: "1", title: "Dados básicos", text: "Nome, WhatsApp, e-mail e senha. Menos de um minuto." },
+  { n: "2", title: "Libera o trial", text: "Cartão agora, sem cobrança por 7 dias. Pedido aprovado ou recusado na hora." },
+  { n: "3", title: "Cadastro completo", text: "Com o acesso liberado, você conta renda, gastos e o que o app precisa saber." }
+] as const;
+
+const faqs = [
+  {
+    q: "Quando o cartão é cobrado?",
+    a: "Só depois dos 7 dias de trial. Nesta etapa a gente só confirma o cartão para liberar o acesso."
+  },
+  {
+    q: "Posso cancelar quando quiser?",
+    a: "Sim. No perfil, em Gerenciar assinatura, você cancela e o acesso segue até o fim do período já pago ou do trial."
+  },
+  {
+    q: "E se eu não quiser continuar?",
+    a: "Cancele antes do trial acabar. Sem cobrança, sem app — a conta fica aí se você voltar."
+  },
+  {
+    q: "A secretaria no WhatsApp já entra no trial?",
+    a: "Sim. Trial libera o MyLyfe inteiro: financeiro, secretaria, rotina e o app Zelo no celular."
+  }
 ] as const;
 
 function normalizeEmail(value: string) {
@@ -53,7 +65,7 @@ function displayNameFromEmail(email: string) {
 export function ConversionLanding({
   onAuthenticated
 }: {
-  onAuthenticated: (session: UserSession, token: string) => void;
+  onAuthenticated: (session: AuthedSession, token: string) => void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [name, setName] = useState("");
@@ -77,7 +89,7 @@ export function ConversionLanding({
     const normalizedEmail = normalizeEmail(email);
 
     if (name.trim().length < 2) {
-      setError("Informe seu nome para desbloquear o acesso.");
+      setError("Informe seu nome para liberar o acesso.");
       return;
     }
 
@@ -99,20 +111,27 @@ export function ConversionLanding({
           phone: phone.trim() || undefined
         })
       });
-      const payload = (await response.json()) as { error?: string; token?: string; session?: UserSession };
+      const payload = (await response.json()) as { error?: string; token?: string; session?: AuthedSession };
       if (!response.ok || !payload.token || !payload.session) {
         setError(
           response.status === 409
-            ? "Este e-mail ja tem conta. Entre para desbloquear o acesso."
+            ? "Este e-mail ja tem conta. Entre para liberar o acesso."
             : payload.error || "Nao foi possivel criar a conta."
         );
         return;
       }
 
-      if (window.location.pathname === "/comece") {
-        window.history.replaceState({}, "", "/");
+      writeAuthToken(payload.token);
+
+      if (sessionHasAccess(payload.session)) {
+        if (window.location.pathname === "/comece") {
+          window.history.replaceState({}, "", "/");
+        }
+        onAuthenticated(payload.session, payload.token);
+        return;
       }
-      onAuthenticated(payload.session, payload.token);
+
+      goToBillingCheckout();
     } catch {
       setError("Nao foi possivel falar com o servidor. Tente de novo em instantes.");
     } finally {
@@ -124,10 +143,10 @@ export function ConversionLanding({
     <main className="conversion">
       <AuthChrome compact>
         <p className="auth-app-kicker">Você viu no Instagram</p>
-        <h1 className="auth-app-title">Preencha o cadastro para desbloquear seu acesso ao app.</h1>
+        <h1 className="auth-app-title">7 dias para colocar a vida no lugar. Depois, só se fizer sentido.</h1>
         <p className="auth-app-body">
-          Você viu o MyLyfe no vídeo. Conta criada, acesso liberado — financeiro, secretaria no WhatsApp e rotina no
-          mesmo lugar.
+          Você veio do vídeo. Cria a conta, libera o trial com o cartão — sem cobrança agora — e o MyLyfe destrava:
+          financeiro, secretaria no WhatsApp e rotina no mesmo lugar.
         </p>
         <form id="cadastro" ref={formRef} onSubmit={(event) => void submit(event)}>
           <FloatingField
@@ -166,9 +185,11 @@ export function ConversionLanding({
             inputMode="tel"
             placeholder="41 99999-0000"
           />
-          <p className="auth-app-note">Leva menos de um minuto. Sem cartão nesta etapa.</p>
+          <p className="auth-app-note">
+            Trial de 7 dias. Cartão agora, cobrança de {planPriceLabel()} só depois. Cancele quando quiser.
+          </p>
           {error && <p className="auth-app-error">{error}</p>}
-          <AuthButton type="submit" busy={busy} label="Desbloquear meu acesso" />
+          <AuthButton type="submit" busy={busy} label="Liberar meu acesso" />
         </form>
         <AuthFooter muted="Já tem uma conta?" action="Entrar" onClick={goToLogin} />
       </AuthChrome>
@@ -191,7 +212,7 @@ export function ConversionLanding({
 
         <section className="conversion-stage">
           <img src={zeloMascotSrc} alt="Zelo te recebe no MyLyfe" className="conversion-mascot-art" />
-          <p>Oi, eu sou o Lyfo. Assim que o cadastro fecha, eu te recebo do outro lado.</p>
+          <p>Oi, eu sou o Lyfo. Assim que o trial começa, eu te recebo do outro lado.</p>
         </section>
 
         <section className="conversion-steps" aria-label="Como funciona">
@@ -204,10 +225,19 @@ export function ConversionLanding({
           ))}
         </section>
 
+        <section className="conversion-faq" aria-label="Dúvidas">
+          {faqs.map((item) => (
+            <article key={item.q} className="conversion-faq-item">
+              <h3>{item.q}</h3>
+              <p>{item.a}</p>
+            </article>
+          ))}
+        </section>
+
         <section className="conversion-close">
-          <h2>Pronto para entrar no app?</h2>
-          <p>Cadastro feito, acesso desbloqueado. Sem cartão agora.</p>
-          <AuthButton label="Desbloquear meu acesso" onClick={scrollToForm} />
+          <h2>Pronto para liberar o app?</h2>
+          <p>Cadastro, trial de 7 dias, acesso no web e no Zelo. {planPriceLabel()} só depois.</p>
+          <AuthButton label="Liberar meu acesso" onClick={scrollToForm} />
         </section>
 
         <footer className="conversion-footer">

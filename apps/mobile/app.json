@@ -129,7 +129,8 @@
           "defaultChannel": "reminders",
           "enableBackgroundRemoteNotifications": false
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "extra": {
       "privacyPolicyUrl": "https://feedeo.com.br/privacidade.html",

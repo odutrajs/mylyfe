@@ -10,6 +10,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Platform, Text, TextInput, View } from "react-native";
+import { sessionHasAccess } from "../src/api";
 import { AuthProvider, useAuth } from "../src/auth-context";
 import { SplashOverlay } from "../src/components/BootSplash";
 import { ReminderNotifications } from "../src/components/ReminderNotifications";
@@ -45,10 +46,16 @@ function Gate({ children }: { children: ReactNode }) {
     const inAuth = segments[0] === "(auth)";
     const authScreen = String(segments.at(1) ?? "");
     const stayingForWhatsApp = inAuth && whatsappAuthScreens.has(authScreen);
+    const accessSession = session ?? pendingSession;
+    const hasAccess = sessionHasAccess(accessSession);
+    if (accessSession && !hasAccess) {
+      if (authScreen !== "paywall") router.replace("/(auth)/paywall");
+      return;
+    }
     if (!session && !pendingSession && !inAuth) {
       router.replace(onboardingSeen ? "/(auth)/login" : "/(auth)/onboarding");
     }
-    if (session && inAuth && !stayingForWhatsApp) router.replace("/(tabs)/home");
+    if (session && inAuth && hasAccess && !stayingForWhatsApp) router.replace("/(tabs)/home");
   }, [onboardingReady, onboardingSeen, pendingSession, ready, router, segments, session]);
 
   useEffect(() => {

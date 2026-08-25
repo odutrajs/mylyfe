@@ -2,10 +2,12 @@ export type MascotMood = "idle" | "wave" | "think" | "celebrate" | "worry" | "se
 export type MascotSize = "sm" | "md" | "lg" | "xl" | "hero";
 
 export const zeloMascotSrc = "/mascots/zelo-mascot.png";
+export const zeloHeaderMascotSrc = "/mascots/mascot-header.png";
 
 type MascotProps = {
   mood?: MascotMood;
   size?: MascotSize;
+  src?: string;
   hoverWave?: boolean;
   className?: string;
   title?: string;
@@ -14,15 +16,16 @@ type MascotProps = {
 export function Mascot({
   mood = "idle",
   size = "md",
+  src = zeloMascotSrc,
   hoverWave = false,
   className = "",
   title = "Zelo, quem cuida da sua vida"
 }: MascotProps) {
   return (
     <img
-      src={zeloMascotSrc}
+      src={src}
       alt={title}
-      className={`mascot mascot--${size} mascot--${mood}${hoverWave ? " mascot--hover-wave" : ""}${className ? ` ${className}` : ""}`}
+      className={`mascot mascot--${size} mascot--${mood}${hoverWave ? " mascot--hover-wave" : ""} mascot--static${className ? ` ${className}` : ""}`}
     />
   );
 }
@@ -39,7 +42,7 @@ export function BrandLockup({
   return (
     <div className="brand-lockup">
       <div className="brand-mark" aria-hidden="true">
-        <Mascot mood={mood} size="sm" hoverWave />
+        <Mascot mood={mood} size="md" />
       </div>
       <div>
         <strong>{title}</strong>

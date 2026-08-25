@@ -1,5 +1,5 @@
 import type { FinancePlan, LifeAlert, RoutineCalendarEvent, SecretaryModuleState } from "@mylyfe/domain";
-import { completePlanAlertOccurrence, mergeAgendaEvents } from "@mylyfe/domain";
+import { completePlanAlertOccurrence, mergeAgendaEvents, mergeRoutineLocalEvents, syncRoutineWithHealthAppointments } from "@mylyfe/domain";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { apiRequest } from "./api";
 import { useAuth } from "./auth-context";
@@ -51,8 +51,11 @@ export function PlanProvider({ children }: { children: ReactNode }) {
 
   const routinePlanId = session?.personalPlanId && session.personalPlanId !== session.planId ? session.personalPlanId : session?.planId;
 
+  const localEventsFromPlan = (plan: FinancePlan | null) =>
+    plan ? syncRoutineWithHealthAppointments(plan).routine.localEvents : [];
+
   const applyAgendaEvents = useCallback((remote: RoutineCalendarEvent[], local?: FinancePlan["routine"]["localEvents"]) => {
-    setEvents(mergeAgendaEvents(remote, local ?? planRef.current?.routine.localEvents ?? []));
+    setEvents(mergeAgendaEvents(remote, mergeRoutineLocalEvents(local ?? [], localEventsFromPlan(planRef.current))));
   }, []);
 
   const syncCalendars = useCallback(
@@ -96,7 +99,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(
     async (options?: RefreshOptions) => {
-      if (!session?.planId || !routinePlanId) {
+      if (!session?.planId || !routinePlanId || !session.subscription?.accessGranted) {
         setPlan(null);
         setEvents([]);
         return;
@@ -134,7 +137,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [applyAgendaEvents, routinePlanId, session?.planId, syncCalendars]
+    [applyAgendaEvents, routinePlanId, session?.planId, session?.subscription?.accessGranted, syncCalendars]
   );
 
   useEffect(() => {

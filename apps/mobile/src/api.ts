@@ -4,6 +4,13 @@ export const authTokenKey = "mylyfe-auth-token";
 
 export const apiUrl = (process.env.EXPO_PUBLIC_API_URL ?? "https://feedeo.com.br/api").replace(/\/$/, "");
 
+export type PublicSubscription = {
+  status: string;
+  trialEnd?: string;
+  currentPeriodEnd?: string;
+  accessGranted: boolean;
+};
+
 export type PublicSession = {
   userId: string;
   planId: string;
@@ -11,7 +18,10 @@ export type PublicSession = {
   name: string;
   email: string;
   hasPushToken: boolean;
+  subscription?: PublicSubscription;
 };
+
+export const sessionHasAccess = (session?: PublicSession | null) => Boolean(session?.subscription?.accessGranted);
 
 export type AuthResult = {
   token: string;

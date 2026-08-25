@@ -38,11 +38,11 @@ const eventTime = (start: string, end: string, allDay: boolean, timeZone: string
 };
 
 export default function AgendaScreen() {
-  const { plan, events, loading, error, refresh, syncCalendars } = usePlan();
+  const { plan, events, loading, error, refresh } = usePlan();
   useFocusEffect(
     useCallback(() => {
-      void syncCalendars();
-    }, [syncCalendars])
+      void refresh({ calendars: true });
+    }, [refresh])
   );
   const timeZone = plan?.routine?.settings.timezone || "America/Sao_Paulo";
   const [selected, setSelected] = useState(todayKey());

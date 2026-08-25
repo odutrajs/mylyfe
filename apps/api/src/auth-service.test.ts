@@ -49,7 +49,8 @@ describe("registerUser", () => {
       planId,
       personalPlanId: planId,
       name: "Ana Silva",
-      email
+      email,
+      subscription: { status: "incomplete", accessGranted: false }
     });
 
     const loggedIn = await loginUser({ email, password: "secret123" });

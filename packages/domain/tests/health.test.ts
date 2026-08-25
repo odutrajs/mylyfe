@@ -356,6 +356,22 @@ describe("natural language agenda command", () => {
     expect(inbox.plan.secretary.alerts.filter((alert) => alert.status === "active").length).toBeGreaterThan(0);
   });
 
+  it("books a same-day consult when the user asks for a reminder", () => {
+    const now = new Date("2026-08-25T14:16:00.000Z");
+    const inbox = applySecretaryInboxToPlan(
+      createEmptyPlan("test"),
+      "Lembrete para consulta do joelho às 13:15",
+      now,
+      "Thiago"
+    );
+    expect(inbox.reply).toMatch(/consulta.*joelho/i);
+    expect(inbox.reply).toMatch(/13:15/);
+    expect(inbox.plan.health.appointments).toHaveLength(1);
+    expect(inbox.plan.health.appointments[0]?.title).toMatch(/consulta.*joelho/i);
+    expect(inbox.plan.routine.localEvents.some((event) => /joelho/i.test(event.title))).toBe(true);
+    expect(inbox.plan.secretary.alerts.some((alert) => alert.notes?.includes("slot:1h"))).toBe(true);
+  });
+
   it("puts health appointments back on the agenda when local events were dropped", () => {
     const booked = applySecretaryInboxToPlan(
       createEmptyPlan("test"),

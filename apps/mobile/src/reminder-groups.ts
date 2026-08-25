@@ -67,7 +67,7 @@ export const groupReminderAlerts = (items: LifeAlert[], timeZone: string, today:
 
 export const homeReminderGroups = (items: LifeAlert[], timeZone: string, today: string, limit = 2) => {
   const groups = groupReminderAlerts(
-    items.filter((alert) => alert.status === "active" && !isAgendaLinkedAlert(alert)),
+    items.filter((alert) => alert.status === "active"),
     timeZone,
     today
   );

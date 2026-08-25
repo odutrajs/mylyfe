@@ -44,6 +44,15 @@ jobs:
             MICROSOFT_REDIRECT_URI=${{ vars.MICROSOFT_REDIRECT_URI }}
             WEB_ORIGIN=${{ vars.WEB_ORIGIN }}
             CERTBOT_EMAIL=${{ vars.CERTBOT_EMAIL }}
+            STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+            STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
+            STRIPE_PRICE_MONTHLY=${{ vars.STRIPE_PRICE_MONTHLY }}
+            STRIPE_TRIAL_DAYS=${{ vars.STRIPE_TRIAL_DAYS }}
+            STRIPE_SUCCESS_URL=${{ vars.STRIPE_SUCCESS_URL }}
+            STRIPE_CANCEL_URL=${{ vars.STRIPE_CANCEL_URL }}
+            BILLING_ALLOWLIST_EMAILS=${{ vars.BILLING_ALLOWLIST_EMAILS }}
+            VITE_PLAN_PRICE_LABEL=${{ vars.VITE_PLAN_PRICE_LABEL }}
         run: bash .github/scripts/deploy-hostinger.sh
 
       - name: Verify production

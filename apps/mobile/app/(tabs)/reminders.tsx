@@ -1,5 +1,5 @@
 import type { LifeAlert } from "@mylyfe/domain";
-import { isAgendaLinkedAlert, isRecurringAlert, normalizeSecretaryModuleState, weekDayKeys, zonedClock, zonedDayKey } from "@mylyfe/domain";
+import { isRecurringAlert, normalizeSecretaryModuleState, weekDayKeys, zonedClock, zonedDayKey } from "@mylyfe/domain";
 import {
   Activity,
   Bell,
@@ -14,7 +14,8 @@ import {
   Smartphone,
   Wallet
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { AnimatedCheck, FadeOnComplete, useHeldComplete } from "../../src/components/AnimatedCheck";
 import { AppHeader } from "../../src/components/AppHeader";
@@ -103,6 +104,11 @@ const subtitleFor = (group: ReminderGroup, timeZone: string) => {
 export default function RemindersScreen() {
   const { plan, loading, refresh, completeAlert, setAlertStatus, deleteAlert } = usePlan();
   const { openSheet } = useUI();
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh])
+  );
   const { held, hold } = useHeldComplete();
   const [filter, setFilter] = useState<Filter>("all");
   const timeZone = plan?.secretary?.settings.timezone || plan?.routine?.settings.timezone || "America/Sao_Paulo";
@@ -114,7 +120,6 @@ export default function RemindersScreen() {
 
   const groups = useMemo(() => {
     const items = normalizeSecretaryModuleState(plan?.secretary).alerts.filter((alert) => {
-      if (isAgendaLinkedAlert(alert)) return false;
       if (alert.status === "cancelled" || alert.status === "completed") return false;
       const key = zonedDayKey(new Date(alert.cycle.dueAt), timeZone);
       const overdue = key < today && alert.status === "active";

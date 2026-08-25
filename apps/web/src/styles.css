@@ -612,16 +612,15 @@ button:disabled {
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  overflow: hidden;
+  width: 64px;
+  height: 72px;
+  background: transparent;
+  overflow: visible;
 }
 
 .brand-mark .mascot {
-  width: 40px;
-  height: 44px;
+  width: 64px;
+  height: 72px;
   margin: 0;
 }
 
@@ -636,8 +635,8 @@ button:disabled {
 
 .consulting-panel .mascot {
   justify-self: start;
-  width: 112px;
-  height: 130px;
+  width: 168px;
+  height: 188px;
   padding: 0;
   border-radius: 0;
   background: none;
@@ -759,16 +758,6 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.onboarding-account-note {
-  margin: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--text);
-  line-height: 1.5;
 }
 
 .onboarding-content {
@@ -3373,7 +3362,6 @@ button.module-overview-card:hover {
   display: block;
   overflow: visible;
   object-fit: contain;
-  animation: mascot-png-bob 3.6s ease-in-out infinite;
 }
 
 .mascot--static {
@@ -4962,6 +4950,30 @@ button.module-overview-card:hover {
   height: auto;
 }
 
+.conversion-faq {
+  display: grid;
+  gap: 12px;
+  padding: 8px 0 20px;
+}
+
+.conversion-faq-item {
+  padding: 18px 18px 16px;
+  border: 1px solid rgba(213, 227, 236, 0.9);
+  border-radius: 20px;
+  background: var(--conversion-surface);
+}
+
+.conversion-faq-item h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.conversion-faq-item p {
+  margin: 8px 0 0;
+  color: var(--conversion-muted);
+}
+
 .conversion-close {
   display: grid;
   justify-items: start;
@@ -5017,6 +5029,12 @@ button.module-overview-card:hover {
     padding: 36px 0;
   }
 
+  .conversion-faq {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    padding: 16px 0 28px;
+  }
+
   .conversion-card {
     padding: 28px 26px 24px;
   }
@@ -5026,6 +5044,67 @@ button.module-overview-card:hover {
     text-align: center;
     padding-bottom: 56px;
   }
+}
+
+.billing-summary {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.billing-summary li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #102a4c;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.billing-summary svg {
+  flex-shrink: 0;
+  color: #0878f9;
+}
+
+.billing-checkout-form {
+  display: grid;
+  gap: 14px;
+}
+
+.billing-element {
+  padding: 14px 14px 6px;
+  border: 1px solid #d5e3ec;
+  border-radius: 20px;
+  background: #ffffff;
+}
+
+.billing-checkout .auth-app-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.billing-result-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 8px;
+  border-radius: 50%;
+}
+
+.billing-result-mark--ok {
+  background: #e7f1fe;
+  color: #0878f9;
+}
+
+.billing-result-mark--bad {
+  background: #fde8ee;
+  color: #e11d48;
 }
 
 .auth-app {

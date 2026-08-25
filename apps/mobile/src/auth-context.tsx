@@ -7,6 +7,7 @@ type AuthContextValue = {
   pendingSession: PublicSession | null;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, phone?: string) => Promise<PublicSession>;
+  refreshSession: () => Promise<PublicSession | null>;
   enterApp: () => void;
   markPushTokenSaved: () => void;
   logout: () => Promise<void>;
@@ -67,6 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const next = await persistAuth((await response.json()) as AuthResult);
         setPendingSession(next);
         return next;
+      },
+      refreshSession: async () => {
+        const response = await apiRequest("/auth/me");
+        const payload = (await response.json()) as { session: PublicSession };
+        setSession((current) => (current ? payload.session : current));
+        setPendingSession((current) => (current ? payload.session : current));
+        return payload.session;
       },
       enterApp: () => {
         if (pendingSession) setSession(pendingSession);

@@ -107,7 +107,8 @@ describe("App auth", () => {
       userId: "user-1",
       planId: "primary",
       name: "Test User",
-      email: "test@example.com"
+      email: "test@example.com",
+      subscription: { status: "active", accessGranted: true }
     };
     const plan = createEmptyPlan("primary");
 
@@ -149,7 +150,7 @@ describe("App auth", () => {
 
     await waitFor(
       () => {
-        const onboarding = screen.queryByText(/vamos entender sua vida financeira/i);
+        const onboarding = screen.queryByText(/primeiro, seu perfil/i);
         const finance = screen.queryByText("Financeiro");
         expect(onboarding || finance).toBeTruthy();
       },
@@ -163,23 +164,31 @@ describe("App auth", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("heading", { name: /preencha o cadastro para desbloquear seu acesso ao app/i })
+        screen.getByRole("heading", { name: /7 dias para colocar a vida no lugar/i })
       ).toBeInTheDocument();
     });
 
-    expect(screen.getAllByRole("button", { name: /desbloquear meu acesso/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /liberar meu acesso/i }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /^entrar$/i })).toBeInTheDocument();
   });
 
-  it("registers from /comece and unlocks the session", async () => {
+  it("registers from /comece and starts checkout instead of unlocking the app", async () => {
     const user = userEvent.setup();
+    const assign = vi.fn();
+    const locationStub = {
+      ...window.location,
+      pathname: "/comece",
+      assign
+    };
+    vi.stubGlobal("location", locationStub);
+
     const session = {
       userId: "user-2",
       planId: "primary",
       name: "Ana Costa",
-      email: "ana@example.com"
+      email: "ana@example.com",
+      subscription: { status: "incomplete", accessGranted: false }
     };
-    const plan = createEmptyPlan("primary");
 
     fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -187,14 +196,6 @@ describe("App auth", () => {
 
       if (url === `${apiUrl}/auth/register` && method === "POST") {
         return Promise.resolve(jsonResponse({ token: "token-456", session }));
-      }
-
-      if (url === `${apiUrl}/plans/primary` && method === "GET") {
-        return Promise.resolve(jsonResponse(plan));
-      }
-
-      if (url.startsWith(`${apiUrl}/plans/primary`) && method === "PUT") {
-        return Promise.resolve(jsonResponse(plan));
       }
 
       return Promise.resolve(jsonResponse({ error: "not found" }, false, 404));
@@ -211,7 +212,7 @@ describe("App auth", () => {
     await user.type(screen.getByLabelText("WhatsApp"), "11999998888");
     await user.type(screen.getByLabelText("E-mail"), "ana@example.com");
     await user.type(screen.getByLabelText("Senha"), "secret123");
-    await user.click(screen.getAllByRole("button", { name: /desbloquear meu acesso/i })[0]);
+    await user.click(screen.getAllByRole("button", { name: /liberar meu acesso/i })[0]);
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -220,13 +221,8 @@ describe("App auth", () => {
       );
     });
 
-    await waitFor(
-      () => {
-        const onboarding = screen.queryByText(/vamos entender sua vida financeira/i);
-        const finance = screen.queryByText("Financeiro");
-        expect(onboarding || finance).toBeTruthy();
-      },
-      { timeout: 5000 }
-    );
+    expect(assign).toHaveBeenCalledWith("/billing/checkout");
+    expect(screen.queryByText(/primeiro, seu perfil/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Financeiro")).not.toBeInTheDocument();
   });
 });

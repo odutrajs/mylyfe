@@ -71,6 +71,21 @@ describe("agenda command parsing", () => {
     });
   });
 
+  it("books a same-day consult when the phrase has a time but no hoje", () => {
+    const parsed = parseAgendaCommand(
+      "Lembrete para consulta do joelho às 13:15",
+      new Date("2026-08-25T14:16:00.000Z"),
+      zone
+    );
+    expect(looksLikeAgendaCommand("Lembrete para consulta do joelho às 13:15")).toBe(true);
+    expect(parsed).toMatchObject({
+      title: expect.stringMatching(/consulta.*joelho/i),
+      destination: "health",
+      time: "13:15",
+      dates: ["2026-08-25"]
+    });
+  });
+
   it("does not treat bill replies or passive consulta phrases as agenda commands", () => {
     expect(looksLikeAgendaCommand("ainda nao paguei")).toBe(false);
     expect(looksLikeIncompleteAgendaCommand("ainda nao paguei")).toBe(false);

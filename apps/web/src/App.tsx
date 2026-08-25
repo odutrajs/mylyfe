@@ -144,9 +144,18 @@ import {
   type TransactionNature,
   type TransactionType
 } from "@mylyfe/domain";
+import { BillingCheckout } from "./BillingCheckout";
+import {
+  BillingCanceled,
+  BillingPaywall,
+  BillingResult,
+  sessionHasAccess,
+  startBillingPortal,
+  type AuthedSession
+} from "./BillingPaywall";
 import { ConversionLanding } from "./ConversionLanding";
 import { AuthButton, AuthChrome, AuthFooter, FloatingField, zeloMascotSrc } from "./auth-ui";
-import { BrandLockup, Mascot, mascotMoodFromCommitment, mascotMoodFromScore, type MascotMood } from "./Mascot";
+import { BrandLockup, Mascot, mascotMoodFromCommitment, mascotMoodFromScore, zeloHeaderMascotSrc, type MascotMood } from "./Mascot";
 import { MoneyField } from "./MoneyField";
 import { HealthView } from "./HealthView";
 import { HomeView } from "./HomeView";
@@ -189,13 +198,7 @@ type RecurringOccurrence = TransactionAnalyticsItem & {
   recurringTransaction: RecurringTransaction;
   month: string;
 };
-type UserSession = {
-  userId: string;
-  planId: string;
-  name: string;
-  email: string;
-  personalPlanId?: string;
-};
+type UserSession = AuthedSession;
 const appName = "MyLyfe";
 const financeModuleId = "finance";
 const secretaryViews = new Set<View>(["secretary-home", "secretary-alerts", "secretary-whatsapp", "secretary-settings"]);
@@ -1188,7 +1191,7 @@ export default function App() {
     let active = true;
 
     async function loadPlan() {
-      if (!activePlanId) {
+      if (!activePlanId || !sessionHasAccess(sessionRef.current)) {
         setLoaded(true);
         return;
       }
@@ -1257,7 +1260,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [activePlanId, session?.email, session?.personalPlanId]);
+  }, [activePlanId, session?.email, session?.personalPlanId, session?.subscription?.accessGranted]);
 
   useEffect(() => {
     if (!loaded || !plan || !activePlanId) return;
@@ -1472,8 +1475,23 @@ export default function App() {
     setSession(sessionForContext);
   };
 
+  const billingPath = window.location.pathname;
+  const openBillingResult = (next: AuthedSession) => {
+    persistSession(next);
+    setSession(next);
+    window.history.replaceState({}, "", "/");
+  };
+
   if (!session) {
-    if (!inviteToken && window.location.pathname === "/comece") {
+    if (billingPath === "/billing/resultado" || billingPath === "/billing/sucesso") {
+      return <BillingResult onContinue={openBillingResult} onSignOut={signOut} />;
+    }
+
+    if (billingPath === "/billing/checkout" && new URLSearchParams(window.location.search).get("start")) {
+      return <BillingCheckout onSignOut={signOut} />;
+    }
+
+    if (!inviteToken && billingPath === "/comece") {
       return <ConversionLanding onAuthenticated={handleAuthenticated} />;
     }
 
@@ -1486,6 +1504,20 @@ export default function App() {
         onAuthenticated={handleAuthenticated}
       />
     );
+  }
+
+  if (billingPath === "/billing/resultado" || billingPath === "/billing/sucesso") {
+    return <BillingResult session={session} onContinue={openBillingResult} onSignOut={signOut} />;
+  }
+
+  if (!sessionHasAccess(session)) {
+    if (billingPath === "/billing/checkout") {
+      return <BillingCheckout session={session} onSignOut={signOut} />;
+    }
+    if (billingPath === "/billing/cancelado") {
+      return <BillingCanceled onSignOut={signOut} />;
+    }
+    return <BillingPaywall session={session} onSignOut={signOut} />;
   }
 
   if (!plan || !analysis) return <LoadingScreen />;
@@ -1800,6 +1832,7 @@ function Onboarding({
 }) {
   const [step, setStep] = useState(0);
   const steps = ["Perfil", "Rendas", "Patrimonio", "Dividas", "Objetivos", "Diagnostico"];
+  const sidebarSteps = sessionHasAccess(session) && step > 0 ? steps : ["Perfil"];
 
   const complete = () => {
     setPlan((current) => (current ? { ...current, onboardingCompleted: true } : current));
@@ -1810,14 +1843,18 @@ function Onboarding({
       <aside className="onboarding-aside">
         <BrandLockup title={appName} caption="Modulo financeiro" />
         <div className="consulting-panel">
-          <Mascot mood="idle" size="lg" className="mascot--static" />
+          <Mascot src={zeloHeaderMascotSrc} size="xl" />
           <div className="consulting-panel-copy">
-            <h1>Vamos entender sua vida financeira</h1>
-            <p>O diagnostico nasce dos seus dados e muda junto com eles.</p>
+            <h1>{step === 0 ? "Primeiro, seu perfil" : "Vamos entender sua vida financeira"}</h1>
+            <p>
+              {step === 0
+                ? "Nome, idade e WhatsApp. O restante do cadastro aparece depois."
+                : "O diagnostico nasce dos seus dados e muda junto com eles."}
+            </p>
           </div>
         </div>
         <ol className="step-list">
-          {steps.map((label, index) => (
+          {sidebarSteps.map((label, index) => (
             <li key={label} className={index === step ? "active" : index < step ? "done" : ""}>
               <span>{index < step ? <Check size={14} /> : index + 1}</span>
               {label}
@@ -1840,12 +1877,6 @@ function Onboarding({
             Ja tenho conta. Quero entrar
           </button>
         </div>
-        {step === 0 && (
-          <p className="onboarding-account-note">
-            Voce esta comecando um cadastro novo{session.email ? ` como ${session.email}` : ""}. Se ja tinha uma conta MyLyfe,
-            entre com o mesmo e-mail e senha para recuperar seus dados.
-          </p>
-        )}
         {step === 0 && <ProfileStep plan={plan} setPlan={setPlan} />}
         {step === 1 && <IncomeEditor plan={plan} setPlan={setPlan} compact />}
         {step === 2 && <AssetEditor plan={plan} setPlan={setPlan} compact />}
@@ -1951,7 +1982,7 @@ function PartnerOnboarding({
       <aside className="onboarding-aside">
         <BrandLockup title={appName} caption="Conta vinculada" />
         <div className="consulting-panel">
-          <Mascot mood="idle" size="lg" className="mascot--static" />
+          <Mascot src={zeloHeaderMascotSrc} size="xl" />
           <div className="consulting-panel-copy">
             <h1>Agora cadastre os seus dados</h1>
             <p>
@@ -2478,6 +2509,27 @@ function ProfileView({
               sao as suas, nao as do titular.
             </p>
           )}
+        </EditorSection>
+        <EditorSection title="Assinatura" icon={<CreditCard size={18} />}>
+          <p className="form-note">
+            {session.subscription?.status === "trialing"
+              ? "Voce esta no trial. Cartao e cancelamento ficam no portal da Stripe."
+              : "Cartao, cancelamento e faturas ficam no portal da Stripe."}
+          </p>
+          <div className="wizard-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => {
+                void startBillingPortal().catch((caught: unknown) => {
+                  window.alert(caught instanceof Error ? caught.message : "Nao foi possivel abrir a assinatura.");
+                });
+              }}
+            >
+              <CreditCard size={16} />
+              Gerenciar assinatura
+            </button>
+          </div>
         </EditorSection>
         <EditorSection title="Sessao" icon={<LogOut size={18} />}>
           <p className="form-note">Sair nao desfaz o vinculo. Voce entra de novo com {session.email}.</p>

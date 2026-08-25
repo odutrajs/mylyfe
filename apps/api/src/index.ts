@@ -28,11 +28,23 @@ import {
   loginUser,
   logoutUser,
   registerUser,
+  requirePaidSession,
   startPasswordReset,
   savePushToken,
   sessionFromToken,
   updateAuthSession
 } from "./auth-service.js";
+import {
+  BillingError,
+  createCheckoutLink,
+  createCheckoutSession,
+  createPortalSession,
+  createSubscriptionElements,
+  subscriptionForUser,
+  syncSubscriptionFromStripe,
+  userFromCheckoutStart
+} from "./billing-service.js";
+import { handleStripeWebhook } from "./stripe-webhook.js";
 import { confirmPhoneVerification, PhoneVerifyError, sanitizePlanWhatsappIdentity, startPhoneVerification } from "./phone-verify-service.js";
 import {
   deletePlanAlert,
@@ -131,7 +143,8 @@ const webOrigins = (process.env.WEB_ORIGIN ?? "")
   .split(",")
   .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
-app.use(cors({ origin: webOrigins.length > 0 ? webOrigins : true }));
+const localWebOrigins = ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"];
+app.use(cors({ origin: webOrigins.length > 0 ? [...new Set([...webOrigins, ...localWebOrigins])] : true }));
 
 const requestWebOrigin = (request: express.Request) => {
   const origin = request.get("origin")?.trim();
@@ -144,6 +157,25 @@ const requestWebOrigin = (request: express.Request) => {
     return undefined;
   }
 };
+app.post(
+  "/api/billing/webhook",
+  express.raw({ type: "application/json" }),
+  (request, response, next) => {
+    Promise.resolve(
+      handleStripeWebhook(request.body as Buffer, String(request.headers["stripe-signature"] ?? ""))
+    )
+      .then((result) => {
+        response.json({ received: true, ...result });
+      })
+      .catch((error) => {
+        response.status(400).json({
+          error: error instanceof Error ? error.message : "Webhook invalido."
+        });
+      })
+      .catch(next);
+  }
+);
+
 app.use(express.json({ limit: "5mb" }));
 
 const asyncRoute =
@@ -304,6 +336,98 @@ app.delete(
     }
   })
 );
+
+const sendAuthError = (response: express.Response, error: unknown) => {
+  if (error instanceof AuthError || error instanceof BillingError) {
+    response.status(error.status).json({ error: error.message });
+    return true;
+  }
+  return false;
+};
+
+app.post(
+  "/api/billing/checkout",
+  asyncRoute(async (request, response) => {
+    try {
+      const current = await sessionFromToken(request.headers.authorization);
+      const body = (request.body ?? {}) as { source?: string };
+      response.json(
+        body.source === "mobile"
+          ? await createCheckoutLink(current.user, { source: "mobile" })
+          : await createCheckoutSession(current.user, { source: body.source })
+      );
+    } catch (error) {
+      if (sendAuthError(response, error)) return;
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/billing/elements",
+  asyncRoute(async (request, response) => {
+    try {
+      const body = (request.body ?? {}) as { start?: string };
+      const user = body.start
+        ? await userFromCheckoutStart(body.start)
+        : (await sessionFromToken(request.headers.authorization)).user;
+      response.json(await createSubscriptionElements(user));
+    } catch (error) {
+      if (sendAuthError(response, error)) return;
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/billing/sync",
+  asyncRoute(async (request, response) => {
+    try {
+      const current = await sessionFromToken(request.headers.authorization);
+      response.json({ subscription: await syncSubscriptionFromStripe(current.user) });
+    } catch (error) {
+      if (sendAuthError(response, error)) return;
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/billing/portal",
+  asyncRoute(async (request, response) => {
+    try {
+      const current = await sessionFromToken(request.headers.authorization);
+      response.json(await createPortalSession(current.user));
+    } catch (error) {
+      if (sendAuthError(response, error)) return;
+      throw error;
+    }
+  })
+);
+
+app.get(
+  "/api/billing/subscription",
+  asyncRoute(async (request, response) => {
+    try {
+      const current = await sessionFromToken(request.headers.authorization);
+      response.json({ subscription: await subscriptionForUser(current.user) });
+    } catch (error) {
+      if (sendAuthError(response, error)) return;
+      throw error;
+    }
+  })
+);
+
+const requireAppAccess: express.RequestHandler = (request, response, next) => {
+  Promise.resolve(requirePaidSession(request.headers.authorization))
+    .then(() => next())
+    .catch((error) => {
+      if (sendAuthError(response, error)) return;
+      next(error);
+    });
+};
+
+app.use("/api/plans", requireAppAccess);
 
 app.get(
   "/api/plans/:id",
@@ -489,6 +613,7 @@ app.delete(
 
 app.get(
   "/api/secretary/status",
+  requireAppAccess,
   asyncRoute(async (_request, response) => {
     try {
       const gateway = await fetchSecretaryGateway("/status");
@@ -567,6 +692,7 @@ app.post(
 
 app.post(
   "/api/secretary/phone/start",
+  requireAppAccess,
   asyncRoute(async (request, response) => {
     try {
       const current = await sessionFromToken(request.headers.authorization);
@@ -592,6 +718,7 @@ app.post(
 
 app.post(
   "/api/secretary/phone/confirm",
+  requireAppAccess,
   asyncRoute(async (request, response) => {
     try {
       const current = await sessionFromToken(request.headers.authorization);
@@ -656,6 +783,7 @@ app.post(
 
 app.get(
   "/api/secretary/groups",
+  requireAppAccess,
   asyncRoute(async (_request, response) => {
     try {
       const gateway = await fetchSecretaryGateway("/groups");
@@ -704,6 +832,7 @@ app.patch(
 
 app.get(
   "/api/routine/google/connect",
+  requireAppAccess,
   asyncRoute(async (request, response) => {
     try {
       const planId = await resolveRoutinePlanId(request.headers.authorization, String(request.query.planId ?? ""));
@@ -740,6 +869,7 @@ app.get(
 
 app.get(
   "/api/routine/microsoft/connect",
+  requireAppAccess,
   asyncRoute(async (request, response) => {
     try {
       const planId = await resolveRoutinePlanId(request.headers.authorization, String(request.query.planId ?? ""));
@@ -777,6 +907,7 @@ app.get(
 
 app.get(
   "/api/routine/google/connections/:id/calendars",
+  requireAppAccess,
   asyncRoute(async (request, response) => {
     try {
       const requested = String(request.query.planId ?? "");
@@ -794,6 +925,7 @@ app.get(
 
 app.delete(
   "/api/routine/google/connections/:id",
+  requireAppAccess,
   asyncRoute(async (request, response) => {
     try {
       const requested = String(request.query.planId ?? "");
@@ -811,6 +943,7 @@ app.delete(
 
 app.post(
   "/api/routine/sync",
+  requireAppAccess,
   asyncRoute(async (request, response) => {
     try {
       const planId = await resolveRoutinePlanId(
@@ -830,6 +963,7 @@ app.post(
 
 app.get(
   "/api/routine/events",
+  requireAppAccess,
   asyncRoute(async (request, response) => {
     try {
       const planId = await resolveRoutinePlanId(request.headers.authorization, String(request.query.planId ?? ""));
@@ -900,6 +1034,10 @@ app.post(
     });
   })
 );
+
+app.use((request, response) => {
+  response.status(404).json({ error: `Rota nao encontrada: ${request.method} ${request.path}` });
+});
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   console.error(error);

@@ -244,7 +244,7 @@ const stripScheduleWords = (normalized: string) =>
   normalized
     .replace(/@secretaria|@agendar/g, " ")
     .replace(
-      /\b(adicion[aeo]|adicionar|marc[aeo]|marcar|agend[aeo]|agendar|coloc[aeo]|colocar|bot[aeo]|botar|cri[aeo]|criar|cadastr[aeo]|cadastrar|tenho|temos|terei|vou|vamos|ter|que)\b/g,
+      /\b(adicion[aeo]|adicionar|marc[aeo]|marcar|agend[aeo]|agendar|coloc[aeo]|colocar|bot[aeo]|botar|cri[aeo]|criar|cadastr[aeo]|cadastrar|tenho|temos|terei|vou|vamos|ter|que|lembrete|lembrar|lembra|avisa|avisar|recorde|esquecer)\b/g,
       " "
     )
     .replace(/\b(na|no|da|do|de|em|pra|para|minha|meu|nossa|nosso|sua|seu)\s+(agenda|calendario)\b/g, " ")
@@ -431,10 +431,11 @@ export const looksLikeAgendaCommand = (text: string) => {
   const hasRelativeDate = /\b(hoje|amanha|agora)\b/.test(normalized) || /\b\d{1,2}\s*\/\s*\d{1,2}\b/.test(normalized);
   const meeting = extractMeeting(normalized);
   const implicitOnce = Boolean(meeting) || (hasEventNoun(normalized) && hasEventAnnounce(normalized));
+  const activityOnce = Boolean(knownActivity(normalized) && time);
   const hasTitle = Boolean(knownActivity(normalized) || meeting) || extractTitle(normalized) !== "Compromisso";
   return Boolean(
     time &&
-      (weekdays.length || span.calendarDays || span.occurrenceCount || hasRelativeDate || implicitOnce) &&
+      (weekdays.length || span.calendarDays || span.occurrenceCount || hasRelativeDate || implicitOnce || activityOnce) &&
       (hasScheduleIntent(normalized) || hasTitle || implicitOnce)
   );
 };

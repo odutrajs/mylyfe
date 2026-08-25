@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { Eye, EyeOff, Lock, Mail, Smartphone, User } from "lucide-react-native";
 import { useState } from "react";
 import { Linking, Pressable, Text, TextInput } from "react-native";
-import { ApiError } from "../../src/api";
+import { ApiError, sessionHasAccess } from "../../src/api";
 import { useAuth } from "../../src/auth-context";
 import { AuthButton, AuthFooter, AuthScreen, FloatingField, authPlaceholder, authStyles } from "../../src/components/auth-ui";
 import { maskWhatsapp } from "../../src/format";
@@ -41,7 +41,11 @@ export default function RegisterScreen() {
     setBusy(true);
     setError("");
     try {
-      await register(name, email, password, phone);
+      const next = await register(name, email, password, phone);
+      if (!sessionHasAccess(next)) {
+        router.replace({ pathname: "/(auth)/paywall", params: phone.trim() ? { phone } : {} });
+        return;
+      }
       if (phone.trim()) {
         router.replace({ pathname: "/(auth)/confirm-whatsapp", params: { phone } });
         return;

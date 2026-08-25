@@ -9,8 +9,8 @@ import {
   zonedDayKey
 } from "@mylyfe/domain";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import { useMemo, useRef } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useMemo, useRef } from "react";
 import { Animated, Image, Platform, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../src/auth-context";
@@ -59,6 +59,11 @@ export default function HomeScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const { plan, events, loading, refresh, updatePlan, completeAlert } = usePlan();
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh])
+  );
   const { held, hold } = useHeldComplete();
   const scrollY = useRef(new Animated.Value(0)).current;
   const asOf = useMemo(() => new Date(), []);

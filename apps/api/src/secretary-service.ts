@@ -6,6 +6,7 @@ import {
   relatedSecretaryAlertIds,
   extractVerificationCode,
   findShoppingListByGroupJid,
+  lifeModulePlanId,
   normalizeHomeModuleState,
   normalizePhone,
   normalizeSecretaryModuleState,
@@ -13,11 +14,15 @@ import {
   phonesMatch,
   setShoppingItemSector,
   tickAlert,
+  type FinancePlan,
   type LifeAlert,
+  type Person,
   type SecretaryJob,
   type SecretaryModuleState,
   type SecretarySettings
 } from "@mylyfe/domain";
+import { findUserByEmail } from "./auth-store.js";
+import { notifyPlanDevices } from "./expo-push.js";
 import type { PlanRepository } from "./repository.js";
 import { classifyShoppingSectorWithAi, interpretSecretaryMessageWithAi } from "./secretary-ai.js";
 import { enqueueJobs, getOutbox, readLegacySecretaryState, saveOutbox } from "./secretary-store.js";
@@ -215,7 +220,10 @@ const tickPlan = async (repository: PlanRepository, planId: string, now: Date) =
   }
 
   const state = await saveState(repository, planId, { ...current, alerts: nextAlerts });
-  if (pendingJobs.length) await enqueueJobs(pendingJobs);
+  if (pendingJobs.length) {
+    await enqueueJobs(pendingJobs);
+    await notifyJobs(pendingJobs, nextAlerts);
+  }
   return { state, jobs: pendingJobs };
 };
 
@@ -257,6 +265,40 @@ export const markJobSent = async (jobIdValue: string) => {
 const heardReply = (text: string, reply: string, via?: string) =>
   via === "audio" && reply ? `Ouvi: *${text}*\n\n${reply}` : reply;
 
+const resolveInboxTarget = async (
+  repository: PlanRepository,
+  matched: { plan: FinancePlan; person: Person }
+) => {
+  const email = matched.person.email?.trim();
+  const user = email ? await findUserByEmail(email) : undefined;
+  const targetId = lifeModulePlanId(matched.plan, user?.email ?? email, user?.personalPlanId);
+  if (!targetId || targetId === matched.plan.id) return matched;
+
+  const plan = await repository.get(targetId);
+  const phone = matched.person.phone;
+  const person =
+    plan.profile.people.find((item) => phonesMatch(item.phone, phone)) ??
+    (email
+      ? plan.profile.people.find((item) => item.email?.trim().toLowerCase() === email.toLowerCase())
+      : undefined) ??
+    plan.profile.people.find((item) => item.role === "primary") ??
+    matched.person;
+  return { plan, person };
+};
+
+const notifyJobs = async (jobs: SecretaryJob[], alerts: LifeAlert[]) => {
+  const outbound = jobs.filter((job) => job.kind !== "ack" && job.text.trim());
+  await Promise.all(
+    outbound.map((job) =>
+      notifyPlanDevices(job.planId, {
+        title: alerts.find((alert) => alert.id === job.alertId)?.title || "Lembrete",
+        text: job.text,
+        alertId: job.alertId
+      })
+    )
+  );
+};
+
 const unknownPhoneReply =
   "Nao te reconheci neste WhatsApp. Entra no MyLyfe, cadastra este numero em Secretaria > Preferencias e confirma o codigo que eu mandar.";
 
@@ -289,15 +331,15 @@ export const handleSecretaryInbox = async (
     return { planId: null, state: null as SecretaryModuleState | null, reply, jobs, matchedAlertId: undefined };
   }
 
-  const { plan, person } = matched;
-  if (!person.whatsappVerifiedAt) {
+  if (!matched.person.whatsappVerifiedAt) {
     const reply =
       "Recebi sua mensagem, mas este WhatsApp ainda nao foi confirmado. Entra no MyLyfe, pede o codigo em Secretaria > Preferencias e me manda os 6 digitos.";
-    const jobs = toJobs(plan.id, phone, [{ text: reply, kind: "ack" }], true);
+    const jobs = toJobs(matched.plan.id, phone, [{ text: reply, kind: "ack" }], true);
     await enqueueJobs(jobs);
-    return { planId: plan.id, state: plan.secretary, reply, jobs, matchedAlertId: undefined };
+    return { planId: matched.plan.id, state: matched.plan.secretary, reply, jobs, matchedAlertId: undefined };
   }
 
+  const { plan, person } = await resolveInboxTarget(repository, matched);
   return withLock(plan.id, async () => {
     const current = await readState(repository, plan.id);
     const latest = await repository.get(plan.id);
