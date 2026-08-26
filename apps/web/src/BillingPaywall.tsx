@@ -203,7 +203,7 @@ export function BillingResult({
         <p className="auth-app-kicker">Pedido aprovado</p>
         <h1 className="auth-app-title">Trial liberado. Agora vamos completar seu cadastro.</h1>
         <p className="auth-app-body">
-          Os dados básicos já estão na conta. O próximo passo é o cadastro completo — renda, gastos e o que o MyLyfe
+          Os dados básicos já estão na conta. O próximo passo é o cadastro completo — renda, gastos e o que o Zelo
           precisa para te acompanhar.
         </p>
         {fromMobile ? (

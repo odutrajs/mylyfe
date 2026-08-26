@@ -157,7 +157,7 @@ export function BillingCheckout({
 
         <ul className="billing-summary">
           <li>
-            <Check size={16} /> 7 dias grátis no MyLyfe e no app Zelo
+            <Check size={16} /> 7 dias grátis no Zelo, no web e no celular
           </li>
           <li>
             <Check size={16} /> {planPriceLabel()} só depois do trial

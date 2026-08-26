@@ -43,7 +43,7 @@ const faqs = [
   },
   {
     q: "A secretaria no WhatsApp já entra no trial?",
-    a: "Sim. Trial libera o MyLyfe inteiro: financeiro, secretaria, rotina e o app Zelo no celular."
+    a: "Sim. Trial libera o Zelo inteiro: financeiro, secretaria, rotina e o app no celular."
   }
 ] as const;
 
@@ -58,7 +58,7 @@ function displayNameFromEmail(email: string) {
     .split(" ")
     .filter(Boolean);
 
-  if (words.length === 0) return "Usuario MyLyfe";
+  if (words.length === 0) return "Usuario Zelo";
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
@@ -145,7 +145,7 @@ export function ConversionLanding({
         <p className="auth-app-kicker">Você viu no Instagram</p>
         <h1 className="auth-app-title">7 dias para colocar a vida no lugar. Depois, só se fizer sentido.</h1>
         <p className="auth-app-body">
-          Você veio do vídeo. Cria a conta, libera o trial com o cartão — sem cobrança agora — e o MyLyfe destrava:
+          Você veio do vídeo. Cria a conta, libera o trial com o cartão — sem cobrança agora — e o Zelo destrava:
           financeiro, secretaria no WhatsApp e rotina no mesmo lugar.
         </p>
         <form id="cadastro" ref={formRef} onSubmit={(event) => void submit(event)}>
@@ -211,8 +211,8 @@ export function ConversionLanding({
         </section>
 
         <section className="conversion-stage">
-          <img src={zeloMascotSrc} alt="Zelo te recebe no MyLyfe" className="conversion-mascot-art" />
-          <p>Oi, eu sou o Lyfo. Assim que o trial começa, eu te recebo do outro lado.</p>
+          <img src={zeloMascotSrc} alt="Zelo te recebe" className="conversion-mascot-art" />
+          <p>Oi, eu sou o Zelo. Assim que o trial começa, eu te recebo do outro lado.</p>
         </section>
 
         <section className="conversion-steps" aria-label="Como funciona">
