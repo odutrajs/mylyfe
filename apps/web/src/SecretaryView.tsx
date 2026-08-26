@@ -325,7 +325,7 @@ export function SecretaryView({
     return (
       <div className="page">
         <header className="page-header">
-          <span>MyLyfe / Secretaria</span>
+          <span>Zelo / Secretaria</span>
           <h1>Configuracao do projeto</h1>
           <p>So o administrador conecta o chip da secretaria e altera as preferencias do projeto.</p>
         </header>
@@ -337,7 +337,7 @@ export function SecretaryView({
     return (
       <div className="page">
         <header className="page-header">
-          <span>MyLyfe / Secretaria</span>
+          <span>Zelo / Secretaria</span>
           <h1>WhatsApp</h1>
           <p>Conecte o chip da secretaria. A sessao fica no container, fora do Financeiro.</p>
         </header>
@@ -394,7 +394,7 @@ export function SecretaryView({
     return (
       <div className="page">
         <header className="page-header">
-          <span>MyLyfe / Secretaria</span>
+          <span>Zelo / Secretaria</span>
           <h1>Preferencias</h1>
           <p>Numero pessoal, fuso e janela em que ela pode escrever.</p>
         </header>
@@ -482,7 +482,7 @@ export function SecretaryView({
     return (
       <div className="page">
         <header className="page-header">
-          <span>MyLyfe / Secretaria</span>
+          <span>Zelo / Secretaria</span>
           <h1>Lembretes</h1>
           <p>Contas, impostos, assinaturas, recebimentos e prazos que ela vai cobrar por voce.</p>
         </header>
@@ -660,7 +660,7 @@ export function SecretaryView({
   return (
     <div className="page">
       <header className="page-header">
-        <span>MyLyfe / Secretaria</span>
+        <span>Zelo / Secretaria</span>
         <h1>Painel</h1>
         <p>Uma secretaria da vida, nao uma tela do Financeiro. Ela lembra, pergunta e reagenda.</p>
       </header>

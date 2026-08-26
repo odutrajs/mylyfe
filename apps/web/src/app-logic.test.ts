@@ -75,7 +75,7 @@ describe("app-logic", () => {
 
     it("builds display name from email", () => {
       expect(displayNameFromEmail("maria.clara@example.com")).toBe("Maria Clara");
-      expect(displayNameFromEmail("@")).toBe("Usuario MyLyfe");
+      expect(displayNameFromEmail("@")).toBe("Usuario Zelo");
     });
   });
 

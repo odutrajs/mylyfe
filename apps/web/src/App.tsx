@@ -199,7 +199,7 @@ type RecurringOccurrence = TransactionAnalyticsItem & {
   month: string;
 };
 type UserSession = AuthedSession;
-const appName = "MyLyfe";
+const appName = "Zelo";
 const financeModuleId = "finance";
 const secretaryViews = new Set<View>(["secretary-home", "secretary-alerts", "secretary-whatsapp", "secretary-settings"]);
 const routineViews = new Set<View>(["routine-home", "routine-agenda", "routine-tasks", "routine-contexts", "routine-calendars"]);
@@ -449,7 +449,7 @@ function displayNameFromEmail(email: string) {
     .split(" ")
     .filter(Boolean);
 
-  if (words.length === 0) return "Usuario MyLyfe";
+  if (words.length === 0) return "Usuario Zelo";
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
@@ -1588,7 +1588,7 @@ function LoadingScreen() {
     <main className="auth-public">
       <div className="auth-public-card">
         <img src={zeloMascotSrc} alt="" />
-        <span>Carregando MyLyfe</span>
+        <span>Carregando Zelo</span>
       </div>
     </main>
   );
@@ -2477,7 +2477,7 @@ function ProfileView({
   return (
     <div className="page">
       <PageHeader
-        eyebrow="MyLyfe / Conta"
+        eyebrow="Zelo / Conta"
         title="Seu perfil"
         subtitle={
           linked
@@ -2589,7 +2589,7 @@ function Dashboard({
   return (
     <div className="page">
       <PageHeader
-        eyebrow="MyLyfe / Financeiro"
+        eyebrow="Zelo / Financeiro"
         title="Financeiro"
         subtitle="Score, comprometimento de renda e fluxo de caixa recalculados com lancamentos futuros, recorrentes e patrimonio."
       />
@@ -2985,7 +2985,7 @@ function AccessView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<Se
   return (
     <div className="page">
       <PageHeader
-        eyebrow="MyLyfe / Permissoes"
+        eyebrow="Zelo / Permissoes"
         title="Acessos da conta"
         subtitle="Convide pessoas para o Financeiro e, se quiser, compartilhe tambem a lista de mercado."
       />
@@ -3504,7 +3504,7 @@ function InsightList({ title, items, empty, tone }: { title: string; items: stri
 function PlanEditor({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<SetStateAction<FinancePlan | null>> }) {
   return (
     <div className="page">
-      <PageHeader eyebrow="MyLyfe / Financeiro" title="Dados financeiros" subtitle="Tudo que muda aqui recalcula diagnostico e metas do modulo." />
+      <PageHeader eyebrow="Zelo / Financeiro" title="Dados financeiros" subtitle="Tudo que muda aqui recalcula diagnostico e metas do modulo." />
       <div className="editor-grid">
         <ProfileStep plan={plan} setPlan={setPlan} />
         <IncomeEditor plan={plan} setPlan={setPlan} />
@@ -3939,10 +3939,10 @@ function DiagnosticPreview({ plan, analysis }: { plan: FinancePlan; analysis: Fi
         <Mascot mood={mascotMoodFromScore(analysis.score.band)} size="lg" />
         <p>
           {analysis.score.band === "excellent" || analysis.score.band === "healthy"
-            ? "Lyfo gostou do que viu. Seu diagnostico ja tem base para crescer."
+            ? "Zelo gostou do que viu. Seu diagnostico ja tem base para crescer."
             : analysis.score.band === "attention" || analysis.score.band === "critical"
-              ? "Lyfo viu pontos de atencao. Vamos ajustar os dados e aliviar a folha."
-              : "Lyfo esta lendo seu cenario. Complete os dados para um diagnostico mais firme."}
+              ? "Zelo viu pontos de atencao. Vamos ajustar os dados e aliviar a folha."
+              : "Zelo esta lendo seu cenario. Complete os dados para um diagnostico mais firme."}
         </p>
       </div>
       <section className="metric-grid compact">
@@ -4261,7 +4261,7 @@ function CategoriesView({
       <PageHeader
         eyebrow="Financeiro"
         title="Categorias"
-        subtitle="O teto sai da renda menos o aporte. Cada categoria recebe um percentual sugerido, e voce ajusta arrastando o Lyfo."
+        subtitle="O teto sai da renda menos o aporte. Cada categoria recebe um percentual sugerido, e voce ajusta arrastando o Zelo."
       />
 
       <section className="metric-grid compact">
@@ -5133,7 +5133,7 @@ function ImportView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispatch<Se
   return (
     <div className="page">
       <PageHeader
-        eyebrow="MyLyfe / Financeiro"
+        eyebrow="Zelo / Financeiro"
         title="Lancar"
         subtitle="Novo lancamento, importacao de fatura e revisao de pendencias ficam separados. Ao aprovar, o item vai para Transacoes."
       />
@@ -5508,7 +5508,7 @@ function TransactionsView({ plan, setPlan }: { plan: FinancePlan; setPlan: Dispa
   return (
     <div className="page">
       <PageHeader
-        eyebrow="MyLyfe / Financeiro"
+        eyebrow="Zelo / Financeiro"
         title="Transacoes"
         subtitle="Consulte o que ja foi aprovado e acompanhe o que ainda segue pendente. Exporte o periodo filtrado quando precisar."
       />
@@ -5710,7 +5710,7 @@ function HistoryView({
 
   return (
     <div className="page">
-      <PageHeader eyebrow="MyLyfe / Financeiro" title="Evolucao" subtitle="Snapshots mensais mostram renda, gastos, aportes e patrimonio ao longo do tempo." />
+      <PageHeader eyebrow="Zelo / Financeiro" title="Evolucao" subtitle="Snapshots mensais mostram renda, gastos, aportes e patrimonio ao longo do tempo." />
       <section className="history-actions">
         <button className="primary-button" onClick={snapshot}>
           <Save size={16} /> Registrar mes atual
